@@ -1,0 +1,12 @@
+OUTPUT_LOAD/
+OUTPUT_INDEX/
+OUTPUT_QUESTIONS/
+vietnews_raw/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.bak
+_old/
+models/
+*.gguf

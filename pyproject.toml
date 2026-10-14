@@ -1,0 +1,58 @@
+[project]
+name = "vietnews-rag"
+version = "0.2.0"
+description = "VietNews: tóm tắt (ViT5) + NER (ELECTRA) + hỏi đáp RAG (bge-m3, FAISS, re-ranker, Qwen)"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    # nền tảng — ghim để máy local khớp với Kaggle
+    "torch==2.8.0",
+    "numpy>=1.26,<2.3",
+    "pandas>=2.2,<3",
+    "pyarrow",
+    "huggingface_hub>=0.30,<1",
+
+    # mô hình
+    "transformers>=4.56,<5",          # <5: transformers 5 làm hỏng tokenizer ViT5
+    "sentence-transformers>=5.0,<6",  # CrossEncoder cho re-ranker
+    "FlagEmbedding",                  # bge-m3
+    "accelerate",                     # device_map='auto' khi nạp Qwen
+    "sentencepiece",                  # tokenizer ViT5
+    "protobuf",
+    "jinja2>=3.1.0",                  # chat template của Qwen
+    "bitsandbytes>=0.46.1",           # Qwen 4-bit (cần GPU NVIDIA)
+
+    # RAG
+    "langchain-core>=0.3,<1",
+    "langchain-text-splitters>=0.3,<1",
+    "faiss-cpu",
+    "tqdm",
+]
+
+[project.scripts]
+vietnews = "text_summarization.cli:main"   # uv run vietnews chat --llm-4bit
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/text_summarization"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+
+# Lấy torch bản CUDA từ index của PyTorch.
+#   cu128: bắt buộc cho RTX 50xx (máy hiện tại), chạy được cả RTX 20/30/40
+#   cu126: RTX 20/30/40 với driver cũ hơn
+#   cpu  : máy không có GPU NVIDIA
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

@@ -1,0 +1,76 @@
+{
+  "model": "Vistral-7B-Chat-GGUF",
+  "model_id": "mradermacher/Vistral-7B-ChatML-i1-GGUF",
+  "embedding_model": "bkai-biencoder",
+  "timestamp": "20261013_220551",
+  "results": [
+    {
+      "model_name": "Vistral-7B-Chat-GGUF",
+      "question": "Thủ đô của Việt Nam là gì?",
+      "context": "Hà Nội là thủ đô của Cộng hòa Xã hội Chủ nghĩa Việt Nam. Thành phố nằm ở phía Bắc nước, có diện tích 3.359,82 km² và dân số khoảng 8 triệu người (2023). Hà Nội là trung tâm chính trị, văn hóa, khoa họ...",
+      "generated_answer": "Thủ đô của Việt Nam là Hà Nội.",
+      "ground_truth": "Hà Nội là thủ đô của Việt Nam.",
+      "latency_ms": 6352.704048156738,
+      "tokens_per_second": 1.574132829767434,
+      "faithfulness_score": 1.0,
+      "relevancy_score": 0.8,
+      "fluency_score": 0.2766666666666666
+    },
+    {
+      "model_name": "Vistral-7B-Chat-GGUF",
+      "question": "Việt Nam có bao nhiêu tỉnh thành?",
+      "context": "Hiện nay Việt Nam có 63 đơn vị hành chính cấp tỉnh, bao gồm 57 tỉnh và 6 thành phố trực thuộc trung ương: Hà Nội, Hồ Chí Minh, Hải Phòng, Đà Nẵng, Cần Thơ và Huế (từ năm 2025).\nViệt Nam nằm trong khu ...",
+      "generated_answer": "Việt Nam có 63 đơn vị hành chính cấp tỉnh, bao gồm 57 tỉnh và 6 thành phố trực thuộc trung ương.",
+      "ground_truth": "Việt Nam có 63 tỉnh thành (57 tỉnh và 6 thành phố trực thuộc trung ương).",
+      "latency_ms": 7593.68109703064,
+      "tokens_per_second": 3.950653130763012,
+      "faithfulness_score": 1.0,
+      "relevancy_score": 0.6666666666666666,
+      "fluency_score": 0.41924999999999996
+    },
+    {
+      "model_name": "Vistral-7B-Chat-GGUF",
+      "question": "Đặc điểm khí hậu của Việt Nam?",
+      "context": "Việt Nam nằm trong khu vực khí hậu nhiệt đới gió mùa, có 2 mùa rõ rệt: mùa khô (tháng 11- tháng 4) và mùa mưa (tháng 5- tháng 10). Nhiệt độ trung niên năm khoảng 22-27°C. Khí hậu có sự khác biệt lớn g...",
+      "generated_answer": "Việt Nam có khí hậu nhiệt đới gió mùa, có 2 mùa rõ rệt: mùa khô và mùa mưa.",
+      "ground_truth": "Việt Nam có khí hậu nhiệt đới gió mùa với 2 mùa rõ rệt: mùa khô và mùa mưa.",
+      "latency_ms": 6918.891429901123,
+      "tokens_per_second": 3.468763781475175,
+      "faithfulness_score": 1.0,
+      "relevancy_score": 0.5,
+      "fluency_score": 0.39299999999999996
+    },
+    {
+      "model_name": "Vistral-7B-Chat-GGUF",
+      "question": "Sông nào dài nhất ở Việt Nam?",
+      "context": "Sông Mekong (tiếng Việt gọi là Sông Cửu Long) là con sông dài nhất chảy qua Việt Nam với đoạn chảy qua lãnh thổ Việt Nam khoảng 220-250 km. Tuy nhiên, nếu tính toàn bộ chiều dài từ nguồn, sông Hồng có...",
+      "generated_answer": "Sông Hồng là sông dài nhất ở Việt Nam.",
+      "ground_truth": "Sông Hồng là sông dài nhất chảy qua Việt Nam (510 km), sông Mekong dài hơn toàn bộ nhưng đoạn qua Việt Nam ngắn hơn.",
+      "latency_ms": 5716.717958450317,
+      "tokens_per_second": 1.9241809863542525,
+      "faithfulness_score": 1.0,
+      "relevancy_score": 0.6666666666666666,
+      "fluency_score": 0.2613684210526316
+    },
+    {
+      "model_name": "Vistral-7B-Chat-GGUF",
+      "question": "Tết Nguyên Đán là dịp lễ gì?",
+      "context": "Tết Nguyên Đán (Tết Ta, Tết Cổ truyền) là dịp lễ quan trọng nhất, lớn nhất trong năm của người Việt Nam. Tết đánh dấu sự chuyển giao giữa năm cũ và năm mới theo âm lịch, thường rơi vào cuối tháng 1 ho...",
+      "generated_answer": "Tết Nguyên Đán là dịp lễ quan trọng nhất, lớn nhất trong năm của người Việt Nam.",
+      "ground_truth": "Tết Nguyên Đán là dịp lễ lớn nhất, quan trọng nhất trong năm của người Việt Nam, đánh dấu năm mới âm lịch.",
+      "latency_ms": 6337.446451187134,
+      "tokens_per_second": 3.3136374660911367,
+      "faithfulness_score": 1.0,
+      "relevancy_score": 0.8333333333333334,
+      "fluency_score": 0.38
+    }
+  ],
+  "summary": {
+    "total_tests": 5,
+    "avg_latency_ms": 6583.88819694519,
+    "avg_tokens_per_sec": 2.846273638890202,
+    "avg_faithfulness": 1.0,
+    "avg_relevancy": 0.6933333333333334,
+    "avg_fluency": 0.3460570175438596
+  }
+}

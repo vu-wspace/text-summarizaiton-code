@@ -1,0 +1,22 @@
+# Image phụ CHỈ để chạy bước "answer" cho LLM cần transformers ≥ 5.2 (Qwen3.5-2B-vie).
+# Không có ViT5 / bge-m3 / FAISS: bước này chỉ đọc contexts.jsonl -> sinh câu trả lời -> answers_<llm>.jsonl.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    LANG=C.UTF-8 \
+    PYTHONIOENCODING=utf-8 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HF_HOME=/root/.cache/huggingface \
+    PYTHONPATH=/app/src
+
+WORKDIR /app
+
+RUN pip install "torch==2.8.0" --index-url https://download.pytorch.org/whl/cu128
+RUN pip install "transformers>=5.2,<6" accelerate "bitsandbytes>=0.46.1" "jinja2>=3.1.0" \
+                sentencepiece protobuf pillow "numpy>=1.26,<2.3"
+
+COPY src ./src
+
+ENTRYPOINT ["python", "-m", "text_summarization"]
+CMD ["answer", "--llm", "qwen3.5-2b-vie"]

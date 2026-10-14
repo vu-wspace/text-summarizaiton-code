@@ -1,0 +1,72 @@
+# Chạy:
+#   docker compose build
+#   docker compose run --rm rag                                       # chat (mặc định: chat --llm-4bit)
+#   docker compose run --rm rag ask "Tóm tắt vụ 2 tàu đối đầu ở Quảng Nam" --llm-4bit
+#   docker compose run --rm rag questions --n 10 --eval --llm-4bit
+#   docker compose run --rm rag evaluate --rescore
+#   docker compose run --rm rag index --steps index                   # dựng lại index.faiss từ embedds.npy
+#   docker compose run --rm rag --help
+#
+# So sánh 3 LLM trên cùng bộ câu hỏi (OUTPUT_QUESTIONS/questions.jsonl):
+#   docker compose run --rm rag contexts                              # truy xuất 1 lần -> contexts.jsonl
+#   docker compose run --rm rag answer --llm qwen2.5-3b
+#   docker compose run --rm rag answer --llm vi-qwen2-3b-rag
+#   docker compose --profile llm5 run --rm llm5 answer --llm qwen3.5-2b-vie   # transformers 5.x
+#   docker compose --profile phogpt run --rm phogpt answer --llm phogpt-4b-chat --llm-4bit   # transformers 4.44
+#   docker compose run --rm rag report                                # -> compare_report.md / .csv
+
+services:
+  rag:
+    build: .
+    image: text_summarization
+    stdin_open: true   # để gõ câu hỏi trong terminal
+    tty: true
+    volumes:
+      - ./OUTPUT_LOAD:/app/OUTPUT_LOAD            # data_article.json
+      - ./OUTPUT_INDEX:/app/OUTPUT_INDEX          # entities.json, faiss_index/{index.faiss, chunks.pkl, embedds.npy}
+      - ./OUTPUT_QUESTIONS:/app/OUTPUT_QUESTIONS  # câu hỏi sinh ra + kết quả chấm
+      - hf_cache:/root/.cache/huggingface         # mô hình tải 1 lần, dùng lại
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  llm5:               # chỉ chạy bước answer cho LLM cần transformers ≥ 5.2
+    profiles: [llm5]
+    build:
+      context: .
+      dockerfile: Dockerfile.llm5
+    image: text_summarization-llm5
+    volumes:
+      - ./OUTPUT_QUESTIONS:/app/OUTPUT_QUESTIONS
+      - hf_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  phogpt:             # chỉ chạy bước answer cho PhoGPT (code MPT riêng, cần transformers 4.44)
+    profiles: [phogpt]
+    build:
+      context: .
+      dockerfile: Dockerfile.phogpt
+    image: text_summarization-phogpt
+    volumes:
+      - ./OUTPUT_QUESTIONS:/app/OUTPUT_QUESTIONS
+      - hf_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  hf_cache:

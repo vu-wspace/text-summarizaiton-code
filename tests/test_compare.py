@@ -1,0 +1,134 @@
+"""So sánh LLM: chỉ số, prompt từng mô hình, và luồng contexts -> answer -> report với LLM giả."""
+import csv
+import sys
+import types
+
+import pytest
+from conftest import FakeModels, FakeStore, hit
+
+from text_summarization import compare
+from text_summarization.cli import main
+from text_summarization.data import read_jsonl, write_jsonl
+from text_summarization.llms import LLM, LLMS, PROMPTS, _version_tuple, get_spec
+from text_summarization.metrics import aggregate, exact_match, score, token_f1, token_recall
+from text_summarization.pipeline import RAGPipeline
+
+
+# ----------------------------------------------------------------- chỉ số
+def test_metrics():
+    assert token_recall('Ông Vũ Ngọc Long bị bắt', 'Vũ Ngọc Long') == 1.0
+    assert token_recall('Long', 'Vũ Ngọc Long') == pytest.approx(1 / 3)
+    assert token_f1('3,2 tỷ đồng', '3,2 tỷ đồng') == 1.0
+    assert 0 < token_f1('Huy đã lừa tổng cộng 3,2 tỷ đồng của nhiều người', '3,2 tỷ đồng') < 0.6   # dài -> F1 thấp
+    assert exact_match('14,43 %', '14,43%') and not exact_match('Năm 14,43%', '14,43%')
+    s = score('Tôi không biết dựa trên các tài liệu được cung cấp.', '3,2 tỷ đồng')
+    assert s['abstain'] and not s['contains'] and s['f1'] == 0
+    assert aggregate([{'contains': True, 'f1': 1.0}, {'contains': False, 'f1': 0.5}],
+                     keys=('contains', 'f1')) == {'contains': 0.5, 'f1': 0.75}
+
+
+# ----------------------------------------------------------------- danh sách LLM
+def test_registry_and_prompts():
+    assert set(LLMS) == {'qwen2.5-3b', 'vi-qwen2-3b-rag', 'qwen3.5-2b-vie', 'phogpt-4b-chat'}
+    assert get_spec('vi-qwen2-3b-rag').prompt == 'vi-rag'
+    assert get_spec('qwen3.5-2b-vie').loader == 'image-text'
+    with pytest.raises(SystemExit):
+        get_spec('gpt-5')
+    for system, user in PROMPTS.values():                  # mọi prompt đều nhận đủ 2 trường
+        assert '{' not in user.format(context='C', question='Q')
+    assert _version_tuple('5.2.0.dev0') > _version_tuple('5.1.9') > _version_tuple('4.57.6')
+
+
+def test_answer_uses_model_specific_prompt(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(LLM, 'chat', lambda self, s, u, n=256: seen.setdefault(self.spec.key, u))
+    LLM('vi-qwen2-3b-rag').answer('Ai?', 'NGỮ')
+    LLM('qwen2.5-3b').answer('Ai?', 'NGỮ')
+    assert '### Ngữ cảnh :\nNGỮ' in seen['vi-qwen2-3b-rag'] and seen['vi-qwen2-3b-rag'].endswith('### Trả lời :')
+    assert seen['qwen2.5-3b'].startswith('NGỮ CẢNH:\nNGỮ')
+
+
+# ----------------------------------------------------------------- luồng đầy đủ với LLM giả
+class FakeLLM:
+    REPLIES = {'qwen2.5-3b': 'Đáp án là 3,2 tỷ đồng.', 'vi-qwen2-3b-rag': 'Không biết.'}
+
+    def __init__(self, key, load_4bit=False, verbose=False):
+        self.spec = get_spec(key)
+        self.model = types.SimpleNamespace(dtype='bf16')
+
+    def timed_answer(self, q, ctx, n):
+        return self.REPLIES[self.spec.key], 0.5
+
+    def unload(self):
+        pass
+
+
+@pytest.fixture
+def fake_torch(monkeypatch):
+    cuda = types.SimpleNamespace(is_available=lambda: False)
+    monkeypatch.setitem(sys.modules, 'torch', types.SimpleNamespace(cuda=cuda, __version__='fake'))
+    monkeypatch.setitem(sys.modules, 'transformers', types.SimpleNamespace(__version__='4.57.6'))
+    monkeypatch.setattr(compare, 'LLM', FakeLLM)
+
+
+def test_contexts_answer_report(tmp_path, articles, fake_torch):
+    store = FakeStore([hit('1', 'huy'), hit('2', 'đt'), hit('3', 'ch')])
+    rag = RAGPipeline(store, articles, {}, FakeModels(vocab=['huy']))
+    qs = [{'id': 1, 'guid': '1', 'question': 'Hồ Xuân Huy lừa bao nhiêu tiền?', 'answer': '3,2 tỷ đồng'},
+          {'id': 2, 'guid': '9', 'question': 'Bài không có trong kho?', 'answer': 'X'}]
+    ctx = compare.build_contexts(rag, qs)
+    assert ctx[0]['hit@1'] and ctx[0]['context'] and not ctx[1]['hit@3']
+    write_jsonl(ctx, compare.contexts_path(tmp_path))
+
+    for key in FakeLLM.REPLIES:
+        rows, meta = compare.run_llm(key, read_jsonl(compare.contexts_path(tmp_path)))
+        assert meta['repo'] == get_spec(key).repo and meta['peak_vram_gb'] is None
+        compare.save_answers(tmp_path, key, rows, meta)
+
+    results = compare.load_results(tmp_path)
+    assert list(results) == ['qwen2.5-3b', 'vi-qwen2-3b-rag']        # qwen3.5 chưa chạy -> bỏ qua
+    summary = {r['llm']: r for r in compare.write_report(tmp_path, ctx, results)}
+    assert summary['qwen2.5-3b']['contains'] == 0.5 and summary['vi-qwen2-3b-rag']['abstain'] == 1.0
+
+    md = (tmp_path / 'compare_report.md').read_text(encoding='utf-8')
+    assert '✅' in md and '🚫' in md and 'hit@1 = 0.50' in md
+    with open(tmp_path / 'compare_review.csv', encoding='utf-8-sig') as f:
+        review = list(csv.DictReader(f))
+    assert len(review) == 4 and 'dung_that (0/1)' in review[0]
+
+
+def test_cli_answer_and_report(tmp_path, fake_torch, capsys):
+    write_jsonl([{'id': 1, 'question': 'Q?', 'answer': '3,2 tỷ đồng', 'guid': '1', 'context': 'C',
+                  'sources': ['1'], 'hit@1': True, 'hit@3': True}], compare.contexts_path(tmp_path))
+    main(['--questions-dir', str(tmp_path), 'answer', '--llm', 'qwen2.5-3b'])
+    main(['--questions-dir', str(tmp_path), 'report'])
+    assert (tmp_path / 'answers_qwen2.5-3b.meta.json').exists()
+    assert '| qwen2.5-3b | 1.00 |' in capsys.readouterr().out
+    main(['llms'])
+    assert 'alphaedge-ai/Qwen3.5-2B-vie-32768' in capsys.readouterr().out
+
+
+def test_phogpt_prompt_and_version_range(monkeypatch):
+    from text_summarization.llms import check_transformers
+
+    class Tok:
+        chat_template = 'x'
+
+        def apply_chat_template(self, msgs, **kw):
+            return msgs
+
+    llm = LLM('phogpt-4b-chat')
+    llm._tok = Tok()
+    system, user = PROMPTS['phogpt']
+    msgs = llm._prompt(system, user.format(context='C', question='Q?'))
+    assert [m['role'] for m in msgs] == ['user']                    # template PhoGPT không có vai system
+    assert 'Dựa vào văn bản sau đây:\nC' in msgs[0]['content']
+
+    spec = get_spec('phogpt-4b-chat')
+    for have, ok in [('4.44.2', True), ('4.57.6', False), ('4.39.0', False)]:
+        monkeypatch.setitem(sys.modules, 'transformers', types.SimpleNamespace(__version__=have))
+        if ok:
+            check_transformers(spec)
+        else:
+            with pytest.raises(SystemExit, match='service phogpt'):
+                check_transformers(spec)

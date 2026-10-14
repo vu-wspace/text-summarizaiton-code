@@ -1,0 +1,18 @@
+# Dữ liệu gắn qua volume, không chép vào image
+OUTPUT_LOAD
+OUTPUT_INDEX
+OUTPUT_QUESTIONS
+vietnews_raw
+
+# Không cần trong image
+_old
+tests
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.bak
+*.zip
+uv.lock
+.ipynb_checkpoints
+.git
