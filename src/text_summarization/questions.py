@@ -5,14 +5,20 @@ Chấm : với mỗi câu hỏi, chạy RAG như người dùng thật rồi đo
        hit@1    bài nguồn là bài đầu tiên trong ngữ cảnh đưa cho LLM
        hit@3    bài nguồn nằm trong ngữ cảnh (≤ 3 bài)
        contains câu trả lời chứa đáp án chuẩn (đã chuẩn hoá ngày tháng, ngoặc, dấu câu)
+Truy xuất: chỉ chạy retriever (+ re-ranker), không cần LLM, so sánh dense / sparse / hybrid
+       hit@k    bài nguồn nằm trong k bài KHÁC NHAU đầu tiên (thứ tự theo chunk tốt nhất của bài)
+       MRR      trung bình 1/hạng của bài nguồn (0 nếu không có trong top-k chunk)
 """
 import json
 import random
 import re
 import sys
 
+from . import config as C
 from .metrics import token_recall
-from .text import contains_answer
+from .text import contains_answer, normalize_query
+
+KS = (1, 3, 5, 10, 20)
 
 GEN_SYSTEM = 'Bạn là người soạn câu hỏi kiểm tra đọc hiểu tin tức tiếng Việt. Chỉ trả về JSON.'
 GEN_USER = (
@@ -135,3 +141,56 @@ def summary(res):
         return 'Không có câu nào.'
     rate = lambda k: sum(bool(x[k]) for x in res) / n  # noqa: E731
     return f"hit@1={rate('hit@1'):.2f}  hit@3={rate('hit@3'):.2f}  contains={rate('contains'):.2f}  (n={n})"
+
+
+# ----------------------------------------------------------------- chấm riêng retriever
+def article_rank(hits, guid):
+    """Hạng (1-based) của bài guid trong danh sách bài khác nhau rút từ hits; None nếu không có."""
+    seen = []
+    for h in hits:
+        if h.guid not in seen:
+            seen.append(h.guid)
+            if h.guid == guid:
+                return len(seen)
+    return None
+
+
+def retrieval_eval(pipeline, rows, modes=('dense', 'sparse', 'hybrid'), k=C.TOP_K, rerank=True):
+    """-> (per_question, summary). Mỗi câu embed 1 lần, dùng chung cho mọi chế độ."""
+    models, store = pipeline.models, pipeline.store
+    per_q, ranks = [], {(m, s): [] for m in modes for s in (('retriever', 'rerank') if rerank else ('retriever',))}
+    for r in rows:
+        q, guid = normalize_query(r['question']), str(r['guid'])
+        vec = models.embed_query(q)
+        out = {'id': r['id'], 'question': q, 'guid': guid}
+        for m in modes:
+            hits = store.search(vec, k, text=q, mode=m)
+            stages = {'retriever': hits}
+            if rerank:
+                scores = models.rerank(q, [h.text for h in hits]) if hits else []
+                order = sorted(range(len(hits)), key=lambda i: -scores[i])
+                stages['rerank'] = [hits[i] for i in order]
+            for stage, hs in stages.items():
+                rank = article_rank(hs, guid)
+                ranks[(m, stage)].append(rank)
+                out[f'{m}/{stage}'] = rank
+        per_q.append(out)
+        print(f"  [{r['id']}] " + '  '.join(f'{key}={out[key]}' for key in out if '/' in key))
+
+    summary_rows = []
+    for (m, stage), rs in ranks.items():
+        if not rs:
+            continue
+        row = {'mode': m, 'stage': stage, 'n': len(rs)}
+        for kk in KS:
+            row[f'hit@{kk}'] = round(sum(x is not None and x <= kk for x in rs) / len(rs), 3)
+        row['MRR'] = round(sum(1 / x for x in rs if x) / len(rs), 3)
+        summary_rows.append(row)
+    return per_q, summary_rows
+
+
+def retrieval_table(summary_rows):
+    cols = ['mode', 'stage'] + [f'hit@{k}' for k in KS] + ['MRR', 'n']
+    lines = ['| ' + ' | '.join(cols) + ' |', '|' + '---|' * len(cols)]
+    lines += ['| ' + ' | '.join(str(r[c]) for c in cols) + ' |' for r in summary_rows]
+    return '\n'.join(lines)

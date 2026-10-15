@@ -8,43 +8,106 @@ from langchain_core.documents import Document
 
 from text_summarization.data import read_jsonl
 from text_summarization.indexing import run_index
-from text_summarization.questions import check, generate, has_anchor, parse_json, pick_chunks, rescore
-from text_summarization.store import FaissStore, build_index
+from text_summarization import sparse
+from text_summarization.questions import (article_rank, check, generate, has_anchor, parse_json, pick_chunks,
+                                          rescore, retrieval_eval)
+from text_summarization.store import QdrantStore, build_index
 
 DATA = Path(__file__).parent / 'data'
 
 
+TEXT = 'Từ tháng 10/2016 , Hồ Xuân Huy lừa nhiều người với tổng số tiền 3,2 tỷ đồng . ' * 6
+
+
+def make_chunks(n=30):
+    chunks = [Document(page_content=TEXT, metadata={'guid': str(i // 3), 'title': f'T{i // 3}'})
+              for i in range(n)]
+    # chunk 13 là chunk duy nhất nói về "Vinamilk" -> BM25 phải tìm ra nó
+    if n > 13:
+        chunks[13] = Document(
+            page_content='Cổ đông F & N Dairy Investments của Singapore mua thêm cổ phần Vinamilk .',
+            metadata={'guid': '4', 'title': 'T4'})
+    return chunks
+
+
 @pytest.fixture
-def store(tmp_path):
+def client():
+    from qdrant_client import QdrantClient
+    return QdrantClient(':memory:')
+
+
+@pytest.fixture
+def store(tmp_path, client):
     rng = np.random.default_rng(0)
     vecs = rng.normal(size=(30, 16)).astype('float32')
-    text = 'Từ tháng 10/2016 , Hồ Xuân Huy lừa nhiều người với tổng số tiền 3,2 tỷ đồng . ' * 6
-    chunks = [Document(page_content=text, metadata={'guid': str(i // 3), 'title': f'T{i // 3}'})
-              for i in range(30)]
+    chunks = make_chunks()
     with open(tmp_path / 'chunks.pkl', 'wb') as f:
         pickle.dump(chunks, f)
-    build_index(vecs, tmp_path / 'index.faiss')
-    s = FaissStore(tmp_path / 'index.faiss', tmp_path / 'chunks.pkl')
+    assert build_index(client, vecs, chunks) == 30
+    s = QdrantStore(client, tmp_path / 'chunks.pkl')
     s.vecs = vecs
     return s
 
 
-# ----------------------------------------------------------------- FAISS
-def test_search_returns_itself_first(store):
-    hits = store.search(store.vecs[7] * 5, k=3)       # độ lớn không ảnh hưởng: cosine
-    assert hits[0].chunk_idx == 7 and hits[0].guid == '2' and abs(hits[0].score - 1) < 1e-5
+# ----------------------------------------------------------------- Qdrant
+def test_dense_search_returns_itself_first(store):
+    hits = store.search(store.vecs[7] * 5, k=3, mode='dense')      # độ lớn không ảnh hưởng: cosine
+    assert hits[0].chunk_idx == 7 and hits[0].guid == '2' and abs(hits[0].score - 1) < 1e-4
     assert hits[0].score >= hits[1].score >= hits[2].score
 
 
-def test_mismatch_raises(tmp_path, store):
-    build_index(np.zeros((5, 16), dtype='float32') + 1, tmp_path / 'bad.faiss')
+def test_sparse_search_finds_keyword(store):
+    hits = store.search(store.vecs[0], k=3, text='Ai mua cổ phần Vinamilk?', mode='sparse')
+    assert hits[0].chunk_idx == 13 and hits[0].guid == '4'
+
+
+def test_hybrid_combines_both(store):
+    # dense chỉ về chunk 7, BM25 chỉ về chunk 13: RRF giữ cả hai ở đầu danh sách
+    hits = store.search(store.vecs[7], k=5, text='Vinamilk', mode='hybrid')
+    assert {7, 13} <= {h.chunk_idx for h in hits[:2]}
+
+
+def test_hybrid_without_text_falls_back_to_dense(store):
+    assert store.search(store.vecs[7], k=1)[0].chunk_idx == 7
+    assert store.search(store.vecs[7], k=1, text='?!')[0].chunk_idx == 7    # không có từ nào -> dense
+
+
+def test_mismatch_raises(tmp_path, client, store):
+    build_index(client, np.ones((5, 16), dtype='float32'), make_chunks(5))
     with pytest.raises(ValueError, match='không khớp'):
-        FaissStore(tmp_path / 'bad.faiss', tmp_path / 'chunks.pkl')
+        QdrantStore(client, tmp_path / 'chunks.pkl')
+
+
+def test_bm25_vectors():
+    idx, val = sparse.doc_vector('Hồ Xuân Huy , Hồ Xuân Huy', avg_len=5)
+    assert len(idx) == len(set(idx)) and all(v > 0 for v in val)
+    assert 'hồ_xuân' in sparse.terms('HỒ Xuân')                            # lower + bigram âm tiết
+    assert sparse.query_vector('Hồ Xuân')[1] == [1.0, 1.0, 1.0]
 
 
 def test_invalid_step():
     with pytest.raises(ValueError, match='không hợp lệ'):
         run_index(None, steps=['ner', 'faiss'])
+
+
+def test_article_rank():
+    from conftest import hit
+    hits = [hit('5'), hit('5'), hit('2'), hit('9')]
+    assert article_rank(hits, '5') == 1 and article_rank(hits, '9') == 3 and article_rank(hits, '7') is None
+
+
+def test_retrieval_eval(store, articles):
+    from text_summarization.pipeline import RAGPipeline
+
+    class M(FakeModels):
+        def embed_query(self, text):
+            return store.vecs[7]
+    rag = RAGPipeline(store, articles, {}, M())
+    rows = [{'id': 1, 'question': 'Ai mua cổ phần Vinamilk?', 'guid': '4'}]
+    per_q, summ = retrieval_eval(rag, rows, modes=('dense', 'sparse'))
+    assert per_q[0]['sparse/retriever'] == 1
+    by = {(r['mode'], r['stage']): r for r in summ}
+    assert by[('sparse', 'retriever')]['hit@1'] == 1.0 and by[('sparse', 'retriever')]['MRR'] == 1.0
 
 
 # ----------------------------------------------------------------- sinh câu hỏi

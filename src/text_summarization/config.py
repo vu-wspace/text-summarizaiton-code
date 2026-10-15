@@ -2,32 +2,50 @@
 
 Đường dẫn đổi được bằng biến môi trường (tiện cho Docker / Kaggle):
     RAG_LOAD_DIR, RAG_INDEX_DIR, RAG_QUESTIONS_DIR
+    RAG_QDRANT_URL   (vd. http://localhost:6333; để trống = Qdrant nhúng tại OUTPUT_INDEX/qdrant)
 """
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
-# ----------------------------------------------------------------- mô hình
-NER_MODEL = 'NlpHUST/ner-vietnamese-electra-base'
-EMB_MODEL = 'BAAI/bge-m3'
-RERANK_MODEL = 'BAAI/bge-reranker-v2-m3'
+# ----------------------------------------------------------------- mô hình (theo vietnamese_llm_rag_evaluation.md)
+# Embedding: vietnamese-bi-encoder (768 dim, SentenceTransformer, 485K+ downloads)
+EMB_MODEL = 'bkai-foundation-models/vietnamese-bi-encoder'
+# Reranker: Vietnamese_Reranker (AITeamVN finetuned bge-reranker-v2-m3)
+RERANK_MODEL = 'AITeamVN/Vietnamese_Reranker'
+# Summarization
 SUM_MODEL = 'VietAI/vit5-large-vietnews-summarization'
-LLM_MODEL = 'Qwen/Qwen2.5-3B-Instruct'
+# Default LLM: Vistral-7B-Chat (best Vietnamese chat, Faithfulness 97.5%)
+DEFAULT_LLM = 'vistral-7b-chat'
+# NER
+NER_MODEL = 'NlpHUST/ner-vietnamese-electra-base'
 
-# ----------------------------------------------------------------- tham số
-CHUNK_SIZE = 256        # token của bge-m3
-CHUNK_OVERLAP = 40
-EMB_MAX_LENGTH = 512    # đủ cho chunk 256 token + câu hỏi
+# ----------------------------------------------------------------- tham số chunking (theo evaluation: 512 tokens, overlap 50)
+CHUNK_SIZE = 512        # token (max 512 cho vietnamese-bi-encoder)
+CHUNK_OVERLAP = 50
+EMB_MAX_LENGTH = 512    # max length cho embedding model
 NER_WINDOW = 400        # < 512 (giới hạn cứng của ELECTRA)
 
-TOP_K = 20              # FAISS lấy 20 chunk
-TOP_N_QA = 10           # re-ranker giữ 10 chunk cho nhánh hỏi đáp
-N_ARTICLES = 3          # small-to-big: 10 chunk -> 3 bài khác nhau
-CTX_BUDGET = 3000       # token (tokenizer Qwen) cho ngữ cảnh
+# Semantic chunking options (bật mặc định)
+SEMANTIC_CHUNKING = True              # bật semantic chunking (dùng embedding similarity)
+SEMANTIC_CHUNK_THRESHOLD = 0.75       # ngưỡng cosine similarity để tách chunk (0.7-0.85)
+SEMANTIC_MIN_CHUNK_TOKENS = 64        # chunk nhỏ nhất (token)
+SEMANTIC_MAX_CHUNK_TOKENS = 512       # chunk lớn nhất (token)
 
-SUM_MAX_INPUT = 1024    # ViT5 cắt bài ở 1024 token
+# ----------------------------------------------------------------- tham số retrieval (theo evaluation: top-5 -> rerank to 3)
+TOP_K = 5                 # retriever lấy 5 chunk (giảm từ 20)
+SEARCH_MODE = 'hybrid'    # dense | sparse | hybrid (dense + BM25, gộp RRF)
+PREFETCH = 20             # hybrid: mỗi nhánh lấy 20 chunk trước khi gộp RRF
+TOP_N_QA = 3              # re-ranker giữ 3 chunk cho nhánh hỏi đáp (theo evaluation)
+N_ARTICLES = 3            # small-to-big: 5 chunk -> 3 bài khác nhau
+CTX_BUDGET = 3000         # token (tokenizer Vistral) cho ngữ cảnh
+
+QDRANT_URL = os.environ.get('RAG_QDRANT_URL', '')
+COLLECTION = 'vietnews'
+
+SUM_MAX_INPUT = 1024      # ViT5 cắt bài ở 1024 token
 SUM_MAX_OUTPUT = 256
-SUM_MIN_TEXT = 300      # "tóm tắt: <văn bản ≥ 300 ký tự>" -> tóm tắt chính văn bản đó
+SUM_MIN_TEXT = 300        # "tóm tắt: <văn bản ≥ 300 ký tự>" -> tóm tắt chính văn bản đó
 
 
 @dataclass(frozen=True)
@@ -47,20 +65,20 @@ class Paths:
         return self.index_dir / 'entities.json'
 
     @property
-    def faiss_dir(self):
+    def vector_dir(self):          # tên cũ giữ nguyên để dùng lại chunks.pkl / embedds.npy đã có
         return self.index_dir / 'faiss_index'
 
     @property
     def chunks(self):
-        return self.faiss_dir / 'chunks.pkl'
+        return self.vector_dir / 'chunks.pkl'
 
     @property
     def embeddings(self):
-        return self.faiss_dir / 'embedds.npy'
+        return self.vector_dir / 'embedds.npy'
 
     @property
-    def index(self):
-        return self.faiss_dir / 'index.faiss'
+    def qdrant_dir(self):          # Qdrant nhúng (khi không đặt RAG_QDRANT_URL)
+        return self.index_dir / 'qdrant'
 
     # --- OUTPUT_QUESTIONS
     @property

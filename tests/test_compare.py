@@ -29,7 +29,8 @@ def test_metrics():
 
 # ----------------------------------------------------------------- danh sách LLM
 def test_registry_and_prompts():
-    assert set(LLMS) == {'qwen2.5-3b', 'vi-qwen2-3b-rag', 'qwen3.5-2b-vie', 'phogpt-4b-chat'}
+    assert set(LLMS) == {'qwen2.5-3b', 'vi-qwen2-3b-rag', 'qwen3.5-2b-vie', 'phogpt-4b-chat',
+                         'vinallama-2.7b-chat', 'vistral-7b-chat', 'vietnamese-llama2-7b'}
     assert get_spec('vi-qwen2-3b-rag').prompt == 'vi-rag'
     assert get_spec('qwen3.5-2b-vie').loader == 'image-text'
     with pytest.raises(SystemExit):

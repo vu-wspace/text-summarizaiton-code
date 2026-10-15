@@ -1,9 +1,9 @@
 """Các mô hình nặng, nạp LƯỜI (chỉ nạp khi lần đầu dùng) để câu hỏi nào cũng không chiếm VRAM thừa.
 
-    embed_query / embed_passages : bge-m3 (dense)          -> retriever + indexing
-    rerank                       : bge-reranker-v2-m3      -> re-ranker
-    summarize                    : ViT5-large vietnews     -> tóm tắt
-    answer / chat / count_tokens : LLM chọn bằng --llm     -> sinh câu trả lời, sinh câu hỏi (llms.py)
+    embed_query / embed_passages : vietnamese-bi-encoder (SentenceTransformer) -> retriever + indexing
+    rerank                       : AITeamVN/Vietnamese_Reranker (CrossEncoder)        -> re-ranker
+    summarize                    : ViT5-large vietnews                              -> tóm tắt
+    answer / chat / count_tokens : LLM chọn bằng --llm (default: Vistral-7B-Chat)   -> sinh câu trả lời
 
 Pipeline chỉ gọi qua các hàm này, nên khi test có thể thay cả lớp bằng mô hình giả.
 """
@@ -29,34 +29,33 @@ class Models:
         if self.verbose:
             print(f'  · {msg}', file=sys.stderr, flush=True)
 
-    # ----------------------------------------------------------- bge-m3
-    def _embedder(self, all_gpus=False):
+    # ----------------------------------------------------------- vietnamese-bi-encoder (SentenceTransformer)
+    def _embedder(self):
         if self._emb is None:
-            self.log('nạp bge-m3')
-            from FlagEmbedding import BGEM3FlagModel
+            self.log(f'nạp embedding: {C.EMB_MODEL}')
+            from sentence_transformers import SentenceTransformer
 
-            cuda = self.device == 'cuda'
-            # Indexing: devices=None -> FlagEmbedding chia cho mọi GPU (Kaggle 2×T4). Query: 1 GPU.
-            devices = None if (cuda and all_gpus) else (['cuda:0'] if cuda else ['cpu'])
-            self._emb = BGEM3FlagModel(C.EMB_MODEL, use_fp16=cuda, devices=devices)
+            self._emb = SentenceTransformer(C.EMB_MODEL, device=self.device)
         return self._emb
 
     def embed_query(self, text):
-        vec = self._embedder().encode([text], batch_size=1, max_length=C.EMB_MAX_LENGTH)['dense_vecs']
+        emb = self._embedder()
+        vec = emb.encode([text], batch_size=1, max_length=C.EMB_MAX_LENGTH, convert_to_numpy=True, normalize_embeddings=True)
         return np.asarray(vec, dtype='float32')[0]
 
     def embed_passages(self, texts, batch_size=32):
-        vecs = self._embedder(all_gpus=True).encode(
-            list(texts), batch_size=batch_size, max_length=C.EMB_MAX_LENGTH)['dense_vecs']
+        emb = self._embedder()
+        vecs = emb.encode(list(texts), batch_size=batch_size, max_length=C.EMB_MAX_LENGTH, convert_to_numpy=True, normalize_embeddings=True)
         return np.asarray(vecs, dtype='float32')
 
-    # ----------------------------------------------------------- re-ranker
+    # ----------------------------------------------------------- re-ranker: Vietnamese_Reranker (CrossEncoder)
     def rerank(self, query, texts):
         if self._rerank is None:
-            self.log('nạp re-ranker')
+            self.log(f'nạp re-ranker: {C.RERANK_MODEL}')
             from sentence_transformers import CrossEncoder
 
-            self._rerank = CrossEncoder(C.RERANK_MODEL, device=self.device)  # fp32: fp16 làm lệch điểm
+            # CrossEncoder không có normalize_embeddings, dùng fp32 để chính xác
+            self._rerank = CrossEncoder(C.RERANK_MODEL, device=self.device)
         scores = self._rerank.predict([[query, t] for t in texts], batch_size=64, show_progress_bar=False)
         return [float(s) for s in scores]
 
@@ -77,7 +76,7 @@ class Models:
                                  no_repeat_ngram_size=3, early_stopping=True)
         return tok.decode(out[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-    # ----------------------------------------------------------- LLM (Qwen2.5 / Vi-Qwen2-RAG / Qwen3.5)
+    # ----------------------------------------------------------- LLM (Vistral-7B-Chat / Qwen2.5 / Vi-Qwen2-RAG / ...)
     def answer(self, question, context, max_new_tokens=256):
         self.log(f'sinh câu trả lời bằng {self.llm.spec.key}')
         return self.llm.answer(question, context, max_new_tokens)

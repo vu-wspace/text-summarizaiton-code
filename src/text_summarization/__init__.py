@@ -1,4 +1,4 @@
-"""VietNews: tóm tắt (ViT5) + NER (ELECTRA) + hỏi đáp RAG (bge-m3 + FAISS + re-ranker + Qwen).
+"""VietNews: tóm tắt (ViT5) + NER (ELECTRA) + hỏi đáp RAG (bge-m3 + Qdrant hybrid + re-ranker + Qwen).
 
 Chạy:  python -m text_summarization --help
 """

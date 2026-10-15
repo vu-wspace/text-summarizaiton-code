@@ -1,4 +1,4 @@
-"""Luồng truy vấn: Router -> Retriever (FAISS top-20) -> Re-ranker -> nhánh qa / list / tóm tắt."""
+"""Luồng truy vấn: Router -> Retriever (Qdrant hybrid top-20) -> Re-ranker -> nhánh qa / list / tóm tắt."""
 import sys
 from dataclasses import dataclass, field
 
@@ -21,7 +21,7 @@ class Reply:
 
 class RAGPipeline:
     def __init__(self, store, articles, entities, models, verbose=False):
-        """store: FaissStore | articles: {guid: {title, abstract, article}} | entities: {guid: {TYPE: [..]}}
+        """store: QdrantStore | articles: {guid: {title, abstract, article}} | entities: {guid: {TYPE: [..]}}
         models: Models (hoặc mô hình giả khi test)"""
         if '' in entities:
             raise ValueError('entities.json có key rỗng — chạy lại NER (key = guid)')
@@ -33,10 +33,11 @@ class RAGPipeline:
             print(f'  · {msg}', file=sys.stderr, flush=True)
 
     # ----------------------------------------------------------- retriever + re-ranker
-    def retrieve(self, query, k=C.TOP_K, top_n=C.TOP_N_QA, rerank=True):
-        """FAISS lấy top-k chunk theo cosine, re-ranker chấm lại từng cặp (câu hỏi, chunk), giữ top_n."""
-        self.log('embedding + FAISS')
-        hits = self.store.search(self.models.embed_query(query), k)
+    def retrieve(self, query, k=C.TOP_K, top_n=C.TOP_N_QA, rerank=True, mode=None):
+        """Qdrant lấy top-k chunk (dense / BM25 / hybrid RRF), re-ranker chấm lại từng cặp (câu hỏi, chunk),
+        giữ top_n."""
+        self.log(f'embedding + Qdrant ({mode or self.store.mode})')
+        hits = self.store.search(self.models.embed_query(query), k, text=query, mode=mode)
         if not rerank or not hits:
             return hits[:top_n]
         self.log('re-rank')

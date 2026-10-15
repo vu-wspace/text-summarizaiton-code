@@ -3,10 +3,14 @@
 Thêm mô hình mới = thêm một dòng vào LLMS. Mọi nơi khác (chat, sinh câu hỏi, so sánh) dùng chung lớp LLM.
 """
 import gc
+import json
+import os
 import re
 import sys
 import time
+import urllib.request
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 NO_ANSWER = 'Tôi không biết dựa trên các tài liệu được cung cấp.'
 
@@ -43,6 +47,13 @@ PHOGPT_USER = (
     'Chỉ dùng thông tin trong văn bản, trả lời ngắn gọn, giữ nguyên tên riêng, con số, ngày tháng. '
     f'Nếu văn bản không có câu trả lời, chỉ trả lời: "{NO_ANSWER}"'
 )
+# Khuôn chat cho mô hình không kèm chat_template trong tokenizer
+CHATML = ("{% for m in messages %}<|im_start|>{{ m['role'] }}\n{{ m['content'] }}<|im_end|>\n{% endfor %}"
+          "{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}")
+# Mô hình nền (chưa tinh chỉnh chat): viết thành văn bản liền, để mô hình viết tiếp sau "Trả lời:"
+PLAIN = ("{% for m in messages %}{{ m['content'] }}\n\n{% endfor %}"
+         "{% if add_generation_prompt %}Trả lời:{% endif %}")
+
 PROMPTS = {'ours': (QA_SYSTEM, QA_USER), 'vi-rag': (VIRAG_SYSTEM, VIRAG_USER), 'phogpt': ('', PHOGPT_USER)}
 
 
@@ -52,9 +63,12 @@ class LLMSpec:
     repo: str
     prompt: str = 'ours'
     loader: str = 'causal'           # 'causal' -> AutoModelForCausalLM | 'image-text' -> AutoModelForImageTextToText
+    #                                  'llama-server' -> GGUF chạy bằng llama.cpp server (repo = đường dẫn .gguf)
     min_transformers: str = '4.56'   # khoảng transformers nạp được mô hình: [min, max)
     max_transformers: str = ''
     trust_remote_code: bool = False  # mô hình tự mang code kiến trúc (PhoGPT: MPT của MosaicML)
+    chat_template: str = ''          # ghi đè / bổ sung khi tokenizer không có chat_template
+    max_context: int = 0             # > 0: cửa sổ ngữ cảnh ngắn (Llama-2: 4096) -> cắt ngữ cảnh cho vừa
     service: str = 'rag'             # service docker-compose có đúng phiên bản transformers
     note: str = ''
 
@@ -71,6 +85,15 @@ LLMS = {s.key: s for s in [
             max_transformers='4.45', trust_remote_code=True, service='phogpt',
             note='VinAI, 3,7B tham số huấn luyện từ đầu cho tiếng Việt, ngữ cảnh 8192; code MPT riêng chỉ chạy '
                  'với transformers 4.4x (dùng lớp RoPE của Llama đã bị xoá ở bản mới)'),
+    LLMSpec('vinallama-2.7b-chat', 'vilm/vinallama-2.7b-chat', chat_template=CHATML, max_context=4096,
+            note='Llama-2 rút gọn 2,7B + tiếp tục huấn luyện tiếng Việt (vilm), khuôn ChatML, ngữ cảnh 4096'),
+    LLMSpec('vistral-7b-chat', 'models/Vistral-7B-ChatML.i1-Q4_K_M.gguf', loader='llama-server', max_context=8192,
+            note='Mistral-7B tinh chỉnh tiếng Việt (Viet-Mistral), bản ChatML GGUF Q4_K_M; repo gốc khoá nên chạy '
+                 'bằng llama.cpp: llama-server -m <gguf> -ngl 99 -c 8192 (RAG_LLAMA_URL, mặc định :8080)'),
+    LLMSpec('vietnamese-llama2-7b', 'bkai-foundation-models/vietnamese-llama2-7b-40GB', chat_template=PLAIN,
+            max_context=4096,
+            note='Llama-2-7B tiếp tục huấn luyện trên 40 GB tiếng Việt (BKAI); mô hình NỀN, không phải chat; '
+                 'repo khoá (cần HF token)'),
 ]}
 DEFAULT_LLM = 'qwen2.5-3b'
 
@@ -90,6 +113,8 @@ def _version_tuple(v):
 
 
 def check_transformers(spec):
+    if spec.loader == 'llama-server':
+        return
     import transformers
 
     have = transformers.__version__
@@ -102,6 +127,25 @@ def check_transformers(spec):
             f'{spec.repo} cần transformers {need}, môi trường này có {have}.\n'
             f'  → Chạy bước "answer" của mô hình này trong service {spec.service}:  '
             f'docker compose --profile {spec.service} run --rm {spec.service} answer --llm {spec.key}')
+
+
+LLAMA_URL = os.environ.get('RAG_LLAMA_URL', 'http://localhost:8080')
+
+
+def _post(path, payload, timeout=600):
+    req = urllib.request.Request(LLAMA_URL + path, data=json.dumps(payload).encode('utf-8'),
+                                 headers={'Content-Type': 'application/json'})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode('utf-8'))
+
+
+class ServerTokenizer:
+    """Tokenizer của mô hình GGUF, qua endpoint /tokenize và /detokenize của llama-server."""
+    def encode(self, text, add_special_tokens=False):
+        return _post('/tokenize', {'content': text, 'add_special': add_special_tokens})['tokens']
+
+    def decode(self, ids):
+        return _post('/detokenize', {'tokens': list(ids)})['content']
 
 
 class LLM:
@@ -120,6 +164,8 @@ class LLM:
     # ----------------------------------------------------------- nạp
     @property
     def tokenizer(self):
+        if self._tok is None and self.spec.loader == 'llama-server':
+            self._tok = ServerTokenizer()
         if self._tok is None:
             check_transformers(self.spec)
             from transformers import AutoTokenizer
@@ -133,6 +179,14 @@ class LLM:
 
     @property
     def model(self):
+        if self._model is None and self.spec.loader == 'llama-server':
+            try:
+                with urllib.request.urlopen(LLAMA_URL + '/health', timeout=10):
+                    pass
+            except OSError as e:
+                raise SystemExit(f'Không kết nối được llama-server tại {LLAMA_URL} ({e}). Chạy trước:\n'
+                                 f'  tools/llama-cpp/llama-server -m {self.spec.repo} -ngl 99 -c {self.spec.max_context}')
+            self._model = SimpleNamespace(dtype='gguf', device=None)
         if self._model is None:
             check_transformers(self.spec)
             import torch
@@ -176,6 +230,9 @@ class LLM:
     def _prompt(self, system, user):
         msgs = ([{'role': 'system', 'content': system}] if system else []) + [{'role': 'user', 'content': user}]
         tok = self.tokenizer
+        if self.spec.chat_template:
+            return tok.apply_chat_template(msgs, chat_template=self.spec.chat_template, tokenize=False,
+                                           add_generation_prompt=True)
         if tok.chat_template:
             # enable_thinking=False: tắt chế độ suy luận của Qwen3.x; template Qwen2 bỏ qua tham số này
             return tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True, enable_thinking=False)
@@ -188,6 +245,13 @@ class LLM:
                                                    enable_thinking=False)
 
     def chat(self, system, user, max_new_tokens=256, repetition_penalty=1.05):
+        if self.spec.loader == 'llama-server':   # khuôn chat lấy từ metadata GGUF, giải mã greedy như các LLM khác
+            _ = self.model
+            msgs = ([{'role': 'system', 'content': system}] if system else []) + [{'role': 'user', 'content': user}]
+            out = _post('/v1/chat/completions', {'messages': msgs, 'max_tokens': max_new_tokens, 'temperature': 0,
+                                                 'repeat_penalty': repetition_penalty,
+                                                 'stop': ['<|im_end|>', '<|im_start|>', '\nuser\n']})
+            return THINK_RE.sub('', out['choices'][0]['message']['content'] or '').strip()
         import torch
 
         model, tok = self.model, self.tokenizer
@@ -205,6 +269,13 @@ class LLM:
 
     def answer(self, question, context, max_new_tokens=256):
         system, user = PROMPTS[self.spec.prompt]
+        limit = self.spec.max_context - max_new_tokens if self.spec.max_context else 0
+        if limit:   # ngữ cảnh đo bằng tokenizer của LLM mặc định; mô hình ngữ cảnh ngắn -> cắt bớt
+            # +32: chừa chỗ cho token của khuôn chat (llama-server tự ghép khuôn, không đếm được ở đây)
+            over = self.count_tokens(system + user.format(context=context, question=question)) + 32 - limit
+            if over > 0:
+                self.log(f'cắt {over} token ngữ cảnh cho vừa {limit}')
+                context = self.clip(context, max(self.count_tokens(context) - over - 8, 0))
         return self.chat(system, user.format(context=context, question=question), max_new_tokens)
 
     def probe(self, question='Thủ đô của Việt Nam là gì?'):

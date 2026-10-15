@@ -43,11 +43,13 @@ class FakeModels:
 
 
 class FakeStore:
+    mode = 'hybrid'
+
     def __init__(self, hits):
         self._hits = hits
         self.chunks = []
 
-    def search(self, vec, k):
+    def search(self, vec, k, text=None, mode=None):
         return self._hits[:k]
 
     def __len__(self):

@@ -2,13 +2,14 @@
 
   Xây dựng
     load        tải VietNews, loại trùng, chuẩn hoá       -> OUTPUT_LOAD/
-    index       NER + chunk + embed + FAISS              -> OUTPUT_INDEX/
+    index       NER + chunk + embed + Qdrant (dense+BM25) -> OUTPUT_INDEX/
   Sử dụng
     chat        chatbot trong terminal (qa / liệt kê thực thể / tóm tắt)
     ask         hỏi một câu rồi thoát
   Đánh giá
     questions   sinh N câu hỏi bằng LLM                  -> OUTPUT_QUESTIONS/questions.jsonl
     evaluate    chấm RAG đầu-cuối bằng file câu hỏi      -> questions_eval.jsonl
+    retrieval   hit@k / MRR của dense, sparse, hybrid    -> retrieval_eval.jsonl / retrieval_report.md
   So sánh LLM (cùng câu hỏi, cùng ngữ cảnh)
     llms        liệt kê các LLM có sẵn
     contexts    truy xuất 1 lần cho mọi câu hỏi          -> contexts.jsonl
@@ -19,11 +20,20 @@
 import argparse
 import faulthandler
 import os
+import sys
 from pathlib import Path
 
-# Windows: torch và faiss mỗi bên mang một bản OpenMP -> cho phép cùng tồn tại (vô hại trên Linux).
+# Windows: torch và thư viện khác có thể mang thêm một bản OpenMP -> cho phép cùng tồn tại (vô hại trên Linux).
 os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')
 faulthandler.enable()   # crash ở tầng C vẫn in ra dòng Python gây lỗi
+
+# Fix Windows console encoding for Vietnamese characters in help text
+if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 
 from . import config as C                       # noqa: E402
 from .llms import DEFAULT_LLM, LLMS             # noqa: E402
@@ -34,13 +44,14 @@ def build_pipeline(paths, args):
     from .data import read_json
     from .models import Models
     from .pipeline import RAGPipeline
-    from .store import FaissStore
+    from .store import QdrantStore, connect
 
-    store = FaissStore(paths.index, paths.chunks)
+    store = QdrantStore(connect(paths), paths.chunks, mode=args.search)
     articles = read_json(paths.article)
     entities = read_json(paths.entities)
     models = Models(llm=args.llm, llm_4bit=args.llm_4bit, verbose=args.verbose)
-    print(f'Kho: {len(articles)} bài, {len(store)} chunk | LLM: {args.llm} | device={models.device}')
+    print(f'Kho: {len(articles)} bài, {len(store)} chunk | tìm: {store.mode} | LLM: {args.llm}'
+          f' | device={models.device}')
     return RAGPipeline(store, articles, entities, models, verbose=args.verbose)
 
 
@@ -105,6 +116,25 @@ def cmd_evaluate(args, paths):
         return
     rag = build_pipeline(paths, args)
     _save_eval(evaluate(rag, read_jsonl(src)), src)
+
+
+def cmd_retrieval(args, paths):
+    from .data import read_jsonl, write_jsonl
+    from .questions import retrieval_eval, retrieval_table
+
+    rag = build_pipeline(paths, args)
+    modes = [m.strip() for m in args.modes.split(',') if m.strip()]
+    per_q, summ = retrieval_eval(rag, read_jsonl(paths.questions_dir / args.name), modes,
+                                 rerank=not args.no_rerank)
+    table = retrieval_table(summ)
+    print('\n' + table)
+    write_jsonl(per_q, paths.questions_dir / 'retrieval_eval.jsonl')
+    report = paths.questions_dir / 'retrieval_report.md'
+    report.write_text(f'# Đánh giá truy xuất ({args.name})\n\n'
+                      'hit@k tính theo BÀI (các bài khác nhau, xếp theo chunk tốt nhất), top-20 chunk từ Qdrant, '
+                      'stage=rerank là sau bge-reranker-v2-m3. retrieval_eval.jsonl ghi hạng bài nguồn từng câu '
+                      f'(null = không có trong top-20 chunk).\n\n{table}\n', encoding='utf-8')
+    print(f'  -> {report}')
 
 
 def _save_eval(rows, src, suffix='_eval'):
@@ -224,13 +254,15 @@ def main(argv=None):
         p.add_argument('--llm', default=DEFAULT_LLM, choices=list(LLMS), help='LLM sinh câu trả lời')
         p.add_argument('--llm-4bit', action='store_true', help='nạp LLM 4-bit (cần GPU NVIDIA)')
         p.add_argument('--verbose', action='store_true', help='in từng bước đang chạy')
+        p.add_argument('--search', default=C.SEARCH_MODE, choices=['dense', 'sparse', 'hybrid'],
+                       help='kiểu truy xuất trên Qdrant (mặc định hybrid = dense + BM25, gộp RRF)')
 
     p = sub.add_parser('load', help='tải + làm sạch VietNews')
     p.add_argument('--check', action='store_true', help='chỉ kiểm tra kết quả chuẩn hoá')
     p.add_argument('--source', help='thư mục parquet đã tải sẵn (mặc định đọc từ Hugging Face)')
     p.set_defaults(func=cmd_load)
 
-    p = sub.add_parser('index', help='NER + chunk + embed + FAISS')
+    p = sub.add_parser('index', help='NER + chunk + embed + Qdrant')
     p.add_argument('--steps', default='ner,chunk,embed,index')
     p.add_argument('--chunk-size', type=int, default=C.CHUNK_SIZE)
     p.add_argument('--chunk-overlap', type=int, default=C.CHUNK_OVERLAP)
@@ -260,6 +292,13 @@ def main(argv=None):
                    help='chỉ chấm lại cột contains của file *_eval.jsonl (không nạp mô hình)')
     llm_opts(p)
     p.set_defaults(func=cmd_evaluate)
+
+    p = sub.add_parser('retrieval', help='hit@k / MRR của dense, sparse, hybrid (không cần LLM)')
+    p.add_argument('--name', default='questions.jsonl')
+    p.add_argument('--modes', default='dense,sparse,hybrid')
+    p.add_argument('--no-rerank', action='store_true', help='chỉ đo retriever, bỏ re-ranker')
+    llm_opts(p)
+    p.set_defaults(func=cmd_retrieval)
 
     p = sub.add_parser('llms', help='liệt kê các LLM có sẵn')
     p.set_defaults(func=cmd_llms)

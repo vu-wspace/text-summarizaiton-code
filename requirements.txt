@@ -6,3 +6,4 @@ accelerate>=0.24.0
 bitsandbytes>=0.41.0
 numpy>=1.24.0
 tqdm>=4.66.0
+qdrant-client>=1.12

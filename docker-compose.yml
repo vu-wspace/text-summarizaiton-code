@@ -4,7 +4,7 @@
 #   docker compose run --rm rag ask "Tóm tắt vụ 2 tàu đối đầu ở Quảng Nam" --llm-4bit
 #   docker compose run --rm rag questions --n 10 --eval --llm-4bit
 #   docker compose run --rm rag evaluate --rescore
-#   docker compose run --rm rag index --steps index                   # dựng lại index.faiss từ embedds.npy
+#   docker compose run --rm rag index --steps index                   # dựng lại collection Qdrant từ embedds.npy
 #   docker compose run --rm rag --help
 #
 # So sánh 3 LLM trên cùng bộ câu hỏi (OUTPUT_QUESTIONS/questions.jsonl):
@@ -21,9 +21,13 @@ services:
     image: text_summarization
     stdin_open: true   # để gõ câu hỏi trong terminal
     tty: true
+    environment:
+      - RAG_QDRANT_URL=http://qdrant:6333         # bỏ dòng này để dùng Qdrant nhúng (OUTPUT_INDEX/qdrant)
+    depends_on:
+      - qdrant
     volumes:
       - ./OUTPUT_LOAD:/app/OUTPUT_LOAD            # data_article.json
-      - ./OUTPUT_INDEX:/app/OUTPUT_INDEX          # entities.json, faiss_index/{index.faiss, chunks.pkl, embedds.npy}
+      - ./OUTPUT_INDEX:/app/OUTPUT_INDEX          # entities.json, faiss_index/{chunks.pkl, embedds.npy}, qdrant/
       - ./OUTPUT_QUESTIONS:/app/OUTPUT_QUESTIONS  # câu hỏi sinh ra + kết quả chấm
       - hf_cache:/root/.cache/huggingface         # mô hình tải 1 lần, dùng lại
     deploy:
@@ -33,6 +37,13 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  qdrant:             # kho vector (dense + BM25). Lần đầu: docker compose run --rm rag index --steps index
+    image: qdrant/qdrant:v1.19.1
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
 
   llm5:               # chỉ chạy bước answer cho LLM cần transformers ≥ 5.2
     profiles: [llm5]
@@ -70,3 +81,4 @@ services:
 
 volumes:
   hf_cache:
+  qdrant_data:
