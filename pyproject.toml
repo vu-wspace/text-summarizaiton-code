@@ -1,7 +1,7 @@
 [project]
 name = "vietnews-rag"
 version = "0.2.0"
-description = "VietNews: tóm tắt (ViT5) + NER (ELECTRA) + hỏi đáp RAG (bge-m3, Qdrant hybrid, re-ranker, Qwen)"
+description = "VietNews: tóm tắt (ViT5) + NER (ELECTRA) + hỏi đáp RAG (vietnamese-bi-encoder, Qdrant hybrid, Vietnamese_Reranker, LLM tiếng Việt)"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     # nền tảng — ghim để máy local khớp với Kaggle
@@ -10,17 +10,15 @@ dependencies = [
     "pandas>=2.2,<3",
     "pyarrow",
     "huggingface_hub>=0.30,<1",
-
     # mô hình
     "transformers>=4.56,<5",          # <5: transformers 5 làm hỏng tokenizer ViT5
     "sentence-transformers>=5.0,<6",  # CrossEncoder cho re-ranker
-    "FlagEmbedding",                  # bge-m3
-    "accelerate",                     # device_map='auto' khi nạp Qwen
+    "accelerate",                     # device_map='auto' khi nạp LLM
     "sentencepiece",                  # tokenizer ViT5
     "protobuf",
     "jinja2>=3.1.0",                  # chat template của Qwen
-    "bitsandbytes>=0.46.1",           # Qwen 4-bit (cần GPU NVIDIA)
-
+    "bitsandbytes>=0.46.1",           # LLM 4-bit (cần GPU NVIDIA)
+    "pyvi>=0.1.1",                    # tách từ cho vietnamese-bi-encoder (PhoBERT)
     # RAG
     "langchain-core>=0.3,<1",
     "langchain-text-splitters>=0.3,<1",

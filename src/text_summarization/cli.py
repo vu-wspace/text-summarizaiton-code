@@ -120,7 +120,7 @@ def cmd_evaluate(args, paths):
 
 def cmd_retrieval(args, paths):
     from .data import read_jsonl, write_jsonl
-    from .questions import retrieval_eval, retrieval_table
+    from .questions import KS, retrieval_eval, retrieval_table
 
     rag = build_pipeline(paths, args)
     modes = [m.strip() for m in args.modes.split(',') if m.strip()]
@@ -131,9 +131,10 @@ def cmd_retrieval(args, paths):
     write_jsonl(per_q, paths.questions_dir / 'retrieval_eval.jsonl')
     report = paths.questions_dir / 'retrieval_report.md'
     report.write_text(f'# Đánh giá truy xuất ({args.name})\n\n'
-                      'hit@k tính theo BÀI (các bài khác nhau, xếp theo chunk tốt nhất), top-20 chunk từ Qdrant, '
-                      'stage=rerank là sau bge-reranker-v2-m3. retrieval_eval.jsonl ghi hạng bài nguồn từng câu '
-                      f'(null = không có trong top-20 chunk).\n\n{table}\n', encoding='utf-8')
+                      'hit@k tính theo BÀI (các bài khác nhau, xếp theo chunk tốt nhất), '
+                      f'top-{max(KS)} chunk từ Qdrant, stage=rerank là sau {C.RERANK_MODEL}. '
+                      'retrieval_eval.jsonl ghi hạng bài nguồn từng câu '
+                      f'(null = không có trong top-{max(KS)} chunk).\n\n{table}\n', encoding='utf-8')
     print(f'  -> {report}')
 
 
@@ -205,7 +206,7 @@ def cmd_compare(args, paths):
         write_jsonl(build_contexts(rag, read_jsonl(qdir / args.name)), contexts_path(qdir))
         print(f'  -> {contexts_path(qdir)}')
         rag.models.llm.unload()
-        del rag                                       # giải phóng bge-m3 + re-ranker trước khi nạp LLM
+        del rag                                       # giải phóng embedding + re-ranker trước khi nạp LLM
         _free_gpu()
     ctx = read_jsonl(contexts_path(qdir))
 
@@ -265,7 +266,8 @@ def main(argv=None):
     p = sub.add_parser('index', help='NER + chunk + embed + Qdrant')
     p.add_argument('--steps', default='ner,chunk,embed,index')
     p.add_argument('--chunk-size', type=int, default=C.CHUNK_SIZE)
-    p.add_argument('--chunk-overlap', type=int, default=C.CHUNK_OVERLAP)
+    p.add_argument('--chunk-overlap', type=int, default=C.CHUNK_OVERLAP,
+                   help='chỉ dùng khi tắt SEMANTIC_CHUNKING (semantic chunking không chồng lấn)')
     p.add_argument('--header', action='store_true', help='thêm chunk "tiêu đề . sapo" mỗi bài')
     p.set_defaults(func=cmd_index)
 

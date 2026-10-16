@@ -1,13 +1,19 @@
-# Chạy:
+# Chạy (Windows CMD: "chcp 65001" trước để gõ tiếng Việt):
 #   docker compose build
-#   docker compose run --rm rag                                       # chat (mặc định: chat --llm-4bit)
+#   docker compose up -d qdrant
+#   docker compose run --rm rag index --steps chunk,embed,index       # dựng index (bắt buộc sau khi đổi mô hình embedding)
+#   docker compose run --rm rag index --steps index                   # chỉ nạp lại Qdrant từ chunks.pkl + embedds.npy có sẵn
+#   docker compose run --rm rag                                       # chat (mặc định: vistral-7b-chat qua llama-server trên host, xem bên dưới)
 #   docker compose run --rm rag ask "Tóm tắt vụ 2 tàu đối đầu ở Quảng Nam" --llm-4bit
 #   docker compose run --rm rag questions --n 10 --eval --llm-4bit
 #   docker compose run --rm rag evaluate --rescore
-#   docker compose run --rm rag index --steps index                   # dựng lại collection Qdrant từ embedds.npy
 #   docker compose run --rm rag --help
 #
-# So sánh 3 LLM trên cùng bộ câu hỏi (OUTPUT_QUESTIONS/questions.jsonl):
+# Vistral-7B-Chat (GGUF) chạy bằng llama-server trên MÁY HOST, container gọi qua host.docker.internal:8080:
+#   tools\llama-cpp\llama-server -m models\Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192 --host 0.0.0.0
+#   docker compose run --rm rag chat --llm vistral-7b-chat
+#
+# So sánh LLM trên cùng bộ câu hỏi (OUTPUT_QUESTIONS/questions.jsonl):
 #   docker compose run --rm rag contexts                              # truy xuất 1 lần -> contexts.jsonl
 #   docker compose run --rm rag answer --llm qwen2.5-3b
 #   docker compose run --rm rag answer --llm vi-qwen2-3b-rag
@@ -23,6 +29,9 @@ services:
     tty: true
     environment:
       - RAG_QDRANT_URL=http://qdrant:6333         # bỏ dòng này để dùng Qdrant nhúng (OUTPUT_INDEX/qdrant)
+      - RAG_LLAMA_URL=http://host.docker.internal:8080   # llama-server trên máy host (cho vistral-7b-chat)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"       # Linux cần dòng này; Docker Desktop đã có sẵn
     depends_on:
       - qdrant
     volumes:
@@ -38,7 +47,7 @@ services:
               count: all
               capabilities: [gpu]
 
-  qdrant:             # kho vector (dense + BM25). Lần đầu: docker compose run --rm rag index --steps index
+  qdrant:             # kho vector (dense + BM25). Lần đầu: docker compose run --rm rag index --steps chunk,embed,index
     image: qdrant/qdrant:v1.19.1
     ports:
       - "6333:6333"

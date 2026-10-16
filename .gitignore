@@ -7,7 +7,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.bak
-_old/
 models/
 *.gguf
 tools/

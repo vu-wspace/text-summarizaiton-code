@@ -1,6 +1,6 @@
 """Sinh bộ câu hỏi đánh giá bằng LLM từ kho vector, và chấm RAG bằng chính bộ câu hỏi đó.
 
-Sinh : chọn ngẫu nhiên N chunk (mỗi bài ≤ 1) -> Qwen đặt 1 câu hỏi + đáp án chép từ chunk -> lọc câu kém.
+Sinh : chọn ngẫu nhiên N chunk (mỗi bài ≤ 1) -> LLM đặt 1 câu hỏi + đáp án chép từ chunk -> lọc câu kém.
 Chấm : với mỗi câu hỏi, chạy RAG như người dùng thật rồi đo
        hit@1    bài nguồn là bài đầu tiên trong ngữ cảnh đưa cho LLM
        hit@3    bài nguồn nằm trong ngữ cảnh (≤ 3 bài)
@@ -14,7 +14,6 @@ import random
 import re
 import sys
 
-from . import config as C
 from .metrics import token_recall
 from .text import contains_answer, normalize_query
 
@@ -155,8 +154,9 @@ def article_rank(hits, guid):
     return None
 
 
-def retrieval_eval(pipeline, rows, modes=('dense', 'sparse', 'hybrid'), k=C.TOP_K, rerank=True):
-    """-> (per_question, summary). Mỗi câu embed 1 lần, dùng chung cho mọi chế độ."""
+def retrieval_eval(pipeline, rows, modes=('dense', 'sparse', 'hybrid'), k=max(KS), rerank=True):
+    """-> (per_question, summary). Mỗi câu embed 1 lần, dùng chung cho mọi chế độ.
+    k = max(KS) chunk (không phải C.TOP_K) để hit@10 / hit@20 có nghĩa."""
     models, store = pipeline.models, pipeline.store
     per_q, ranks = [], {(m, s): [] for m in modes for s in (('retriever', 'rerank') if rerank else ('retriever',))}
     for r in rows:

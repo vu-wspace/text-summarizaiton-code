@@ -1,7 +1,7 @@
-"""Kho vector Qdrant: collection 'vietnews' (vector dense bge-m3 + vector thưa BM25) + chunks.pkl.
+"""Kho vector Qdrant: collection 'vietnews' (vector dense vietnamese-bi-encoder + vector thưa BM25) + chunks.pkl.
 
 Point id = vị trí chunk trong chunks.pkl. Ba kiểu tìm:
-    dense  : cosine trên vector bge-m3
+    dense  : cosine trên vector vietnamese-bi-encoder
     sparse : BM25 (TF tính ở sparse.py, IDF do Qdrant tính)
     hybrid : lấy top-PREFETCH của mỗi nhánh rồi gộp bằng Reciprocal Rank Fusion (RRF) ngay trong Qdrant
 
@@ -76,6 +76,7 @@ class QdrantStore:
             self.chunks = pickle.load(f)          # list[langchain Document]
         if not client.collection_exists(collection):
             raise ValueError(f'Chưa có collection {collection!r}. Chạy: python -m text_summarization index --steps index')
+        self.dim = client.get_collection(collection).config.params.vectors[DENSE].size
         n = client.count(collection, exact=True).count
         if n != len(self.chunks):
             raise ValueError(f'Qdrant ({n}) và chunks.pkl ({len(self.chunks)}) không khớp. '
@@ -90,7 +91,7 @@ class QdrantStore:
                    text=c.page_content, score=float(score), chunk_idx=int(i))
 
     def search(self, vec, k, text=None, mode=None):
-        """vec: vector bge-m3 của câu hỏi; text: câu hỏi (cho BM25). Thiếu text -> chỉ dense."""
+        """vec: vector dense của câu hỏi; text: câu hỏi (cho BM25). Thiếu text -> chỉ dense."""
         from qdrant_client import models as qm
 
         mode = mode or self.mode
@@ -101,6 +102,9 @@ class QdrantStore:
         if sv is None:
             mode = 'dense'
         dense_q = np.asarray(vec, dtype='float32').reshape(-1).tolist()
+        if len(dense_q) != self.dim:
+            raise ValueError(f'Vector câu hỏi {len(dense_q)} chiều nhưng collection {self.dim} chiều: index dựng bằng '
+                             f'mô hình embedding khác {C.EMB_MODEL}. Chạy lại: vietnews index --steps chunk,embed,index')
 
         if mode == 'dense':
             res = self.client.query_points(self.collection, query=dense_q, using=DENSE, limit=k)

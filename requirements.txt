@@ -1,9 +1,19 @@
-# Requirements for Vietnamese LLM RAG Evaluation
-torch>=2.0.0
-transformers>=4.35.0
-sentence-transformers>=2.2.0
-accelerate>=0.24.0
-bitsandbytes>=0.41.0
-numpy>=1.24.0
-tqdm>=4.66.0
+# Dùng cho Dockerfile (pip). Giữ khớp với [project.dependencies] trong pyproject.toml.
+# torch cài riêng ở Dockerfile (index CUDA 12.8); numpy ghim ở lệnh pip trong Dockerfile.
+pandas>=2.2,<3
+pyarrow
+huggingface_hub>=0.30,<1
+
+transformers>=4.56,<5          # <5: transformers 5 làm hỏng tokenizer ViT5
+sentence-transformers>=5.0,<6
+accelerate
+sentencepiece
+protobuf
+jinja2>=3.1.0
+bitsandbytes>=0.46.1
+pyvi>=0.1.1
+
+langchain-core>=0.3,<1
+langchain-text-splitters>=0.3,<1
 qdrant-client>=1.12
+tqdm

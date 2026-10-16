@@ -37,3 +37,26 @@ def test_semantic_split_with_embedder():
     chunks = semantic_split(text, tok, embedder=emb, threshold=0.8, min_tokens=2, max_tokens=6)
     assert len(chunks) >= 1
     assert all(len(c.strip()) > 0 for c in chunks)
+
+
+def test_semantic_split_long_sentence_is_cut():
+    tok = FakeTokenizer()
+    text = ' '.join(['từ'] * 100) + '.'
+    chunks = semantic_split(text, tok, max_tokens=30)
+    assert len(chunks) >= 4
+    assert all(len(c.split()) <= 30 for c in chunks)
+    assert ' '.join(chunks).split() == text.split()      # không mất từ nào
+
+
+def test_semantic_split_counts_tokens_on_segmented_text():
+    tok = FakeTokenizer()
+    text = 'Hà Nội đẹp. Đà Nẵng đẹp.'
+    seen = []
+
+    def segment(xs):
+        seen.extend(xs)
+        return [x.replace('Hà Nội', 'Hà_Nội').replace('Đà Nẵng', 'Đà_Nẵng') for x in xs]
+
+    # đã tách từ: mỗi câu 2 token -> vừa 4 token -> gộp 1 chunk; chunk giữ văn bản gốc
+    assert semantic_split(text, tok, max_tokens=4, segment=segment) == [text]
+    assert seen == ['Hà Nội đẹp.', 'Đà Nẵng đẹp.']

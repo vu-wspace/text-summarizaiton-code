@@ -5,7 +5,9 @@ OUTPUT_QUESTIONS
 vietnews_raw
 
 # Không cần trong image
-_old
+models
+tools
+evaluation_results
 tests
 .venv
 .pytest_cache

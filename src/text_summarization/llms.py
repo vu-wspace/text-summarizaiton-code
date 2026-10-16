@@ -12,6 +12,8 @@ import urllib.request
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+from .config import DEFAULT_LLM
+
 NO_ANSWER = 'Tôi không biết dựa trên các tài liệu được cung cấp.'
 
 # ----------------------------------------------------------------- prompt
@@ -95,7 +97,6 @@ LLMS = {s.key: s for s in [
             note='Llama-2-7B tiếp tục huấn luyện trên 40 GB tiếng Việt (BKAI); mô hình NỀN, không phải chat; '
                  'repo khoá (cần HF token)'),
 ]}
-DEFAULT_LLM = 'qwen2.5-3b'
 
 ABSTAIN_RE = re.compile(r'không biết|không (có|tìm thấy|đề cập)[^.]{0,40}(thông tin|trong ngữ cảnh)|'
                         r'không thể trả lời|từ chối trả lời|ngữ cảnh không', re.I)
@@ -162,9 +163,20 @@ class LLM:
             print(f'  · {msg}', file=sys.stderr, flush=True)
 
     # ----------------------------------------------------------- nạp
+    def _check_server(self):
+        """llama-server phải chạy trước: báo lỗi dễ hiểu thay vì traceback ConnectionRefused."""
+        try:
+            with urllib.request.urlopen(LLAMA_URL + '/health', timeout=10):
+                pass
+        except OSError as e:
+            raise SystemExit(f'Không kết nối được llama-server tại {LLAMA_URL} ({e}). Chạy trước:\n'
+                             f'  tools/llama-cpp/llama-server -m {self.spec.repo} -ngl 99 -c {self.spec.max_context}\n'
+                             f'hoặc dùng LLM khác: --llm qwen2.5-3b') from None
+
     @property
     def tokenizer(self):
         if self._tok is None and self.spec.loader == 'llama-server':
+            self._check_server()                 # tokenizer gọi server (đếm token ngữ cảnh) trước cả khi sinh
             self._tok = ServerTokenizer()
         if self._tok is None:
             check_transformers(self.spec)
@@ -180,12 +192,7 @@ class LLM:
     @property
     def model(self):
         if self._model is None and self.spec.loader == 'llama-server':
-            try:
-                with urllib.request.urlopen(LLAMA_URL + '/health', timeout=10):
-                    pass
-            except OSError as e:
-                raise SystemExit(f'Không kết nối được llama-server tại {LLAMA_URL} ({e}). Chạy trước:\n'
-                                 f'  tools/llama-cpp/llama-server -m {self.spec.repo} -ngl 99 -c {self.spec.max_context}')
+            self._check_server()
             self._model = SimpleNamespace(dtype='gguf', device=None)
         if self._model is None:
             check_transformers(self.spec)

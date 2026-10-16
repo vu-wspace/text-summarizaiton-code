@@ -1,4 +1,4 @@
-"""Luồng truy vấn: Router -> Retriever (Qdrant hybrid top-20) -> Re-ranker -> nhánh qa / list / tóm tắt."""
+"""Luồng truy vấn: Router -> Retriever (Qdrant hybrid top-TOP_K) -> Re-ranker -> nhánh qa / list / tóm tắt."""
 import sys
 from dataclasses import dataclass, field
 

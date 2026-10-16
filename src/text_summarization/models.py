@@ -15,6 +15,13 @@ from . import config as C
 from .llms import DEFAULT_LLM, LLM
 
 
+def word_segment(texts):
+    """PhoBERT (vietnamese-bi-encoder) cần đầu vào đã tách từ: 'Hà Nội' -> 'Hà_Nội'."""
+    from pyvi import ViTokenizer
+
+    return [ViTokenizer.tokenize(t) for t in texts]
+
+
 class Models:
     def __init__(self, llm=DEFAULT_LLM, llm_4bit=False, verbose=False):
         import torch
@@ -36,16 +43,17 @@ class Models:
             from sentence_transformers import SentenceTransformer
 
             self._emb = SentenceTransformer(C.EMB_MODEL, device=self.device)
+            self._emb.max_seq_length = C.EMB_MAX_LENGTH
         return self._emb
 
     def embed_query(self, text):
-        emb = self._embedder()
-        vec = emb.encode([text], batch_size=1, max_length=C.EMB_MAX_LENGTH, convert_to_numpy=True, normalize_embeddings=True)
-        return np.asarray(vec, dtype='float32')[0]
+        return self.embed_passages([text], batch_size=1)[0]
 
-    def embed_passages(self, texts, batch_size=32):
+    def embed_passages(self, texts, batch_size=32, segmented=False):
+        """segmented=True: texts đã tách từ sẵn (word_segment) -> không tách lại."""
         emb = self._embedder()
-        vecs = emb.encode(list(texts), batch_size=batch_size, max_length=C.EMB_MAX_LENGTH, convert_to_numpy=True, normalize_embeddings=True)
+        texts = list(texts) if segmented else word_segment(texts)
+        vecs = emb.encode(texts, batch_size=batch_size, convert_to_numpy=True, normalize_embeddings=True)
         return np.asarray(vecs, dtype='float32')
 
     # ----------------------------------------------------------- re-ranker: Vietnamese_Reranker (CrossEncoder)

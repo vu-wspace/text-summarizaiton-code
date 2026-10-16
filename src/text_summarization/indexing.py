@@ -4,6 +4,7 @@ Các bước chạy độc lập được (--steps), nhưng chunks.pkl, embedds.
 danh sách chunk (cùng thứ tự). Mỗi bước kiểm tra số lượng để không lệch âm thầm.
 """
 import pickle
+import re
 
 import numpy as np
 
@@ -15,69 +16,79 @@ SEPARATORS = ['\n\n', '\n', ' . ', ' ? ', ' ! ', ' … ', ' ; ', ' : ', ' , ', '
 STEPS = ('ner', 'chunk', 'embed', 'index')
 
 
+def _split_words(sent, n_tok, max_tokens):
+    """Câu dài hơn max_tokens -> chia đều theo từ (chừa lề 20% vì số token mỗi từ không đều)."""
+    if n_tok <= max_tokens:
+        return [sent]
+    words = sent.split()
+    k = -(-n_tok * 5 // (max_tokens * 4))
+    size = max(1, -(-len(words) // k))
+    return [' '.join(words[i:i + size]) for i in range(0, len(words), size)]
+
+
+SENT_RE = re.compile(r'(?<=[.?!…])\s+')
+
+
+def split_sentences(text, tokenizer, max_tokens=C.SEMANTIC_MAX_CHUNK_TOKENS, segment=list):
+    """-> (câu gốc, câu đã tách từ, số token từng câu). Câu dài hơn max_tokens được chia nhỏ.
+    segment: hàm tách từ list[str] -> list[str] (PhoBERT cần); token đếm trên câu đã tách từ."""
+    sentences = [s.strip() for s in SENT_RE.split(text) if s.strip()]
+    if not sentences:
+        return [], [], []
+
+    def count(seg):
+        return [len(tokenizer.encode(s, add_special_tokens=False)) for s in seg]
+
+    seg = segment(sentences)
+    n_tok = count(seg)
+    if any(t > max_tokens for t in n_tok):
+        sentences = [p for s, t in zip(sentences, n_tok) for p in _split_words(s, t, max_tokens)]
+        seg = segment(sentences)
+        n_tok = count(seg)
+    return sentences, seg, n_tok
+
+
+def group_sentences(n_tok, sims=None, threshold=C.SEMANTIC_CHUNK_THRESHOLD,
+                    min_tokens=C.SEMANTIC_MIN_CHUNK_TOKENS, max_tokens=C.SEMANTIC_MAX_CHUNK_TOKENS):
+    """-> list nhóm chỉ số câu. Tách chunk khi (cosine câu i-1, i < ngưỡng VÀ chunk đã đủ min_tokens)
+    HOẶC thêm câu sẽ vượt max_tokens. sims=None: chỉ gộp theo độ dài."""
+    if not n_tok:
+        return []
+    groups, cur, cur_tok = [], [0], n_tok[0]
+    for i in range(1, len(n_tok)):
+        t = n_tok[i]
+        low_sim = sims is not None and sims[i - 1] < threshold and cur_tok >= min_tokens
+        if low_sim or cur_tok + t > max_tokens:
+            groups.append(cur)
+            cur, cur_tok = [i], t
+        else:
+            cur.append(i)
+            cur_tok += t
+    groups.append(cur)
+    return groups
+
+
+def adjacent_cosine(vecs):
+    """Cosine giữa các vector liên tiếp (vector đã chuẩn hoá)."""
+    return np.sum(vecs[:-1] * vecs[1:], axis=1)
+
+
 def semantic_split(text, tokenizer, embedder=None, threshold=C.SEMANTIC_CHUNK_THRESHOLD,
-                   min_tokens=C.SEMANTIC_MIN_CHUNK_TOKENS, max_tokens=C.SEMANTIC_MAX_CHUNK_TOKENS):
-    """Semantic chunking: tách theo câu, tính cosine similarity giữa các câu liên tiếp,
-    gộp các câu có độ tương đồng cao thành chunk có ý nghĩa hoàn chỉnh."""
-    import re
-    # Tách theo ranh giới câu tiếng Việt
-    sentences = [s.strip() for s in re.split(r'(?<=[.?!…])\s+', text) if s.strip()]
+                   min_tokens=C.SEMANTIC_MIN_CHUNK_TOKENS, max_tokens=C.SEMANTIC_MAX_CHUNK_TOKENS, segment=None):
+    """Semantic chunking 1 văn bản: tách câu, gộp các câu liên tiếp tương đồng thành chunk (văn bản gốc).
+    build_chunks dùng cùng các bước nhưng embed câu của nhiều bài trong một lô cho nhanh."""
+    sentences, seg, n_tok = split_sentences(text, tokenizer, max_tokens, segment or list)
     if not sentences:
         return [text] if text.strip() else []
-    if len(sentences) == 1:
-        return sentences
-
-    # Đếm token từng câu
-    sent_tokens = [len(tokenizer.encode(s, add_special_tokens=False)) for s in sentences]
-
-    # Nếu câu đầu đã vượt max_tokens, dùng recursive splitter
-    chunks = []
-    curr_chunk = [sentences[0]]
-    curr_tokens = sent_tokens[0]
-
-    # Nạp embedding để tính similarity nếu có
+    sims = None
     if embedder is not None and len(sentences) > 1:
-        import numpy as np
-        vecs = embedder.encode(sentences, convert_to_numpy=True, normalize_embeddings=True)
-        # Cosine similarity giữa câu i và i+1
-        sims = np.sum(vecs[:-1] * vecs[1:], axis=1)
-
-        for i in range(1, len(sentences)):
-            s = sentences[i]
-            t = sent_tokens[i]
-            sim = sims[i - 1]
-
-            # Tách chunk nếu:
-            # 1. Similarity thấp hơn ngưỡng VÀ chunk hiện tại đã đủ dài (>= min_tokens)
-            # 2. Hoặc thêm câu này làm vượt max_tokens
-            should_split = (sim < threshold and curr_tokens >= min_tokens) or (curr_tokens + t > max_tokens)
-
-            if should_split and curr_chunk:
-                chunks.append(' '.join(curr_chunk))
-                curr_chunk = [s]
-                curr_tokens = t
-            else:
-                curr_chunk.append(s)
-                curr_tokens += t
-    else:
-        # Fallback: gộp theo độ dài token
-        for i in range(1, len(sentences)):
-            s, t = sentences[i], sent_tokens[i]
-            if curr_tokens + t > max_tokens and curr_chunk:
-                chunks.append(' '.join(curr_chunk))
-                curr_chunk = [s]
-                curr_tokens = t
-            else:
-                curr_chunk.append(s)
-                curr_tokens += t
-
-    if curr_chunk:
-        chunks.append(' '.join(curr_chunk))
-    return chunks
+        sims = adjacent_cosine(embedder.encode(seg, convert_to_numpy=True, normalize_embeddings=True))
+    return [' '.join(sentences[i] for i in g)
+            for g in group_sentences(n_tok, sims, threshold, min_tokens, max_tokens)]
 
 
 def make_splitter(tokenizer, chunk_size=C.CHUNK_SIZE, chunk_overlap=C.CHUNK_OVERLAP):
-    """Đo độ dài bằng TOKEN của bge-m3/vietnamese-bi-encoder, cắt ưu tiên tại ranh giới câu."""
+    """Đo độ dài bằng TOKEN của vietnamese-bi-encoder, cắt ưu tiên tại ranh giới câu."""
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 
     return RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
@@ -93,32 +104,48 @@ def header_chunks(articles):
                      metadata={**d.metadata, 'is_header': True}) for d in articles]
 
 
-def build_chunks(articles, chunk_size=C.CHUNK_SIZE, chunk_overlap=C.CHUNK_OVERLAP, header=False,
-                 semantic=C.SEMANTIC_CHUNKING):
+def build_chunks(articles, models, chunk_size=C.CHUNK_SIZE, chunk_overlap=C.CHUNK_OVERLAP, header=False,
+                 semantic=C.SEMANTIC_CHUNKING, block=1000):
+    """-> (chunks, segmented): segmented[i] là chunks[i] đã tách từ (pyvi chạy 1 lần, bước embed dùng lại).
+    Semantic: mỗi khối `block` bài embed mọi câu trong một lô lớn (nhanh hơn nhiều so với từng bài)."""
     from langchain_core.documents import Document
     from transformers import AutoTokenizer
 
+    from .models import word_segment
+
     tok = AutoTokenizer.from_pretrained(C.EMB_MODEL)
-
     if semantic:
-        print('Dùng SEMANTIC CHUNKING (embedding similarity)...')
-        from sentence_transformers import SentenceTransformer
-        embedder = SentenceTransformer(C.EMB_MODEL)
+        print(f'Semantic chunking (ngưỡng cosine {C.SEMANTIC_CHUNK_THRESHOLD}, '
+              f'{C.SEMANTIC_MIN_CHUNK_TOKENS}-{chunk_size} token)...')
+        from tqdm.auto import tqdm
 
-        all_chunks = []
-        for doc in articles:
-            text = f"{doc.metadata.get('title', '')} . {doc.page_content}"
-            splits = semantic_split(text, tok, embedder=embedder)
-            for s in splits:
-                all_chunks.append(Document(page_content=s, metadata=doc.metadata))
-        chunks = all_chunks
+        chunks, segmented = [], []
+        bar = tqdm(total=len(articles), desc='Semantic chunk')
+        for start in range(0, len(articles), block):
+            docs = articles[start:start + block]
+            parts = [split_sentences(f"{d.metadata.get('title', '')} . {d.page_content}", tok, chunk_size,
+                                     word_segment) for d in docs]
+            vecs = models.embed_passages([s for _, seg, _ in parts for s in seg], batch_size=256, segmented=True)
+            pos = 0
+            for doc, (sents, seg, n_tok) in zip(docs, parts):
+                v, pos = vecs[pos:pos + len(sents)], pos + len(sents)
+                sims = adjacent_cosine(v) if len(sents) > 1 else None
+                for g in group_sentences(n_tok, sims, max_tokens=chunk_size):
+                    chunks.append(Document(page_content=' '.join(sents[i] for i in g), metadata=doc.metadata))
+                    segmented.append(' '.join(seg[i] for i in g))
+            bar.update(len(docs))
+        bar.close()
     else:
         chunks = make_splitter(tok, chunk_size, chunk_overlap).split_documents(articles)
+        segmented = word_segment(c.page_content for c in chunks)
 
-    lens = [len(tok.encode(c.page_content, add_special_tokens=False)) for c in chunks]
+    lens = [len(tok.encode(s, add_special_tokens=False)) for s in segmented]
     print(f'Chunk: {len(chunks)} ({len(chunks) / len(articles):.2f}/bài) | token p50={np.percentile(lens, 50):.0f}'
           f' p90={np.percentile(lens, 90):.0f} max={max(lens)}' + (' | + header' if header else ''))
-    return (header_chunks(articles) if header else []) + chunks
+    if header:
+        heads = header_chunks(articles)
+        chunks, segmented = heads + chunks, word_segment(c.page_content for c in heads) + segmented
+    return chunks, segmented
 
 
 def run_index(paths, steps=STEPS, chunk_size=C.CHUNK_SIZE, chunk_overlap=C.CHUNK_OVERLAP, header=False):
@@ -137,9 +164,14 @@ def run_index(paths, steps=STEPS, chunk_size=C.CHUNK_SIZE, chunk_overlap=C.CHUNK
         from .ner import run_ner
         run_ner(articles, paths.entities)
 
-    chunks = None
+    models = None
+    if steps & {'chunk', 'embed'}:
+        from .models import Models
+        models = Models()                                 # 1 bản embedding dùng chung cho chunk + embed
+
+    chunks = segmented = None
     if 'chunk' in steps:
-        chunks = build_chunks(articles, chunk_size, chunk_overlap, header)
+        chunks, segmented = build_chunks(articles, models, chunk_size, chunk_overlap, header)
         with open(paths.chunks, 'wb') as f:
             pickle.dump(chunks, f)
         print(f'  -> {paths.chunks}')
@@ -149,8 +181,10 @@ def run_index(paths, steps=STEPS, chunk_size=C.CHUNK_SIZE, chunk_overlap=C.CHUNK
 
     vectors = None
     if 'embed' in steps:
-        from .models import Models
-        vectors = Models().embed_passages([c.page_content for c in chunks])
+        if segmented is not None:
+            vectors = models.embed_passages(segmented, batch_size=128, segmented=True)
+        else:
+            vectors = models.embed_passages([c.page_content for c in chunks], batch_size=128)
         np.save(paths.embeddings, vectors)
         print(f'  -> {paths.embeddings} {vectors.shape}')
     elif 'index' in steps:
