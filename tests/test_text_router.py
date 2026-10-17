@@ -52,3 +52,13 @@ def test_type_words():
     assert wanted_types('vụ tàu') is None
     assert strip_type_words('các địa điểm trong vụ tàu') == 'vụ tàu'
     assert strip_type_words('địa điểm') == 'địa điểm'   # không còn gì -> giữ nguyên
+
+
+def test_entity_types_only_from_leading_phrase():
+    # từ chỉ loại nằm trong chủ đề không được tính
+    assert wanted_types('địa điểm trong vụ cháy công ty Rạng Đông') == ['LOCATION']
+    assert wanted_types('vụ người hùng cứu người') is None
+    # nhiều loại
+    assert wanted_types('người và tổ chức trong vụ Hồ Xuân Huy') == ['PERSON', 'ORGANIZATION']
+    assert strip_type_words('người và tổ chức trong vụ Hồ Xuân Huy') == 'vụ Hồ Xuân Huy'
+    assert strip_type_words('các thực thể có trong vụ tàu') == 'vụ tàu'

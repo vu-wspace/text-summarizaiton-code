@@ -83,7 +83,7 @@ text_summarization/
 │   ├── config.py      # Đường dẫn, tên mô hình, tham số (chunking, top-k, ...)
 │   ├── text.py        # Chuẩn hoá VietNews, làm sạch input terminal, so khớp đáp án
 │   ├── data.py        # Tải + loại trùng VietNews, đọc/ghi JSON
-│   ├── ner.py         # NER cả bài (ELECTRA, cửa sổ ≤ 400 token, gộp tên)
+│   ├── ner.py         # NER tiêu đề + sapo + thân bài (ELECTRA, cửa sổ ≤ 400 token, gộp tên tắt vào họ tên đầy đủ)
 │   ├── indexing.py    # Semantic chunking -> embed -> Qdrant
 │   ├── sparse.py      # Vector thưa BM25 (unigram + bigram âm tiết), IDF do Qdrant tính
 │   ├── store.py       # QdrantStore: dense / sparse / hybrid (RRF) + chunks.pkl
@@ -95,7 +95,7 @@ text_summarization/
 │   ├── metrics.py     # Contains, recall, F1, EM, tỉ lệ từ chối
 │   ├── compare.py     # So sánh nhiều LLM trên cùng ngữ cảnh
 │   └── cli.py         # CLI: vietnews <lệnh>
-├── tests/                          # 45 unit test (pytest)
+├── tests/                          # unit test (pytest)
 ├── evaluation_results/             # Kết quả benchmark JSON
 ├── evaluate_vietnamese_rag.py      # Script benchmark LLM RAG
 ├── vietnamese_llm_rag_evaluation.md

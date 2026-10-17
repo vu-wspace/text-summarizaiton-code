@@ -54,21 +54,28 @@ class NER:
         return out
 
     def __call__(self, text, min_score=0.6, drop_misc=False):
-        wins = self.windows(text)
-        if not wins:
-            return {}
-        ents = Counter()
-        for win, res in zip(wins, self.pipe(wins, batch_size=16)):
-            for e in res:
-                name = win[e['start']:e['end']].strip(' ,.')   # lấy từ văn bản gốc (giữ nguyên dấu)
-                typ = e['entity_group']
-                if e['score'] < min_score or len(name) < 2 or (drop_misc and typ == 'MISCELLANEOUS'):
-                    continue
-                ents[(name, typ)] += 1
-        grouped = defaultdict(list)
-        for (name, typ), _ in sorted(merge_aliases(ents).items(), key=lambda x: -x[1]):
-            grouped[typ].append(name)
-        return dict(grouped)
+        return self.extract([text], min_score, drop_misc)[0]
+
+    def extract(self, texts, min_score=0.6, drop_misc=False, batch_size=32):
+        """NER nhiều bài: gom cửa sổ của mọi bài vào một lô (nhanh hơn nhiều so với gọi pipeline từng bài)."""
+        wins = [self.windows(t) for t in texts]
+        flat = [w for ws in wins for w in ws]
+        results = iter(self.pipe(flat, batch_size=batch_size) if flat else [])
+        out = []
+        for ws in wins:
+            ents = Counter()
+            for win in ws:
+                for e in next(results):
+                    name = win[e['start']:e['end']].strip(' ,.')   # lấy từ văn bản gốc (giữ nguyên dấu)
+                    typ = e['entity_group']
+                    if e['score'] < min_score or len(name) < 2 or (drop_misc and typ == 'MISCELLANEOUS'):
+                        continue
+                    ents[(name, typ)] += 1
+            grouped = defaultdict(list)
+            for (name, typ), _ in sorted(merge_aliases(ents).items(), key=lambda x: -x[1]):
+                grouped[typ].append(name)
+            out.append(dict(grouped))
+        return out
 
 
 def merge_aliases(ents):
@@ -83,8 +90,15 @@ def merge_aliases(ents):
     return merged
 
 
-def run_ner(articles, path, save_every=1000):
-    """NER từng bài, lưu {guid: {TYPE: [tên, ...]}}. Chạy tiếp được nếu bị ngắt (bỏ qua bài đã có)."""
+def ner_text(doc):
+    """Tiêu đề + sapo + thân bài. Báo thường chỉ nêu họ tên đầy đủ ở sapo ('Hồ Xuân Huy'), thân bài gọi tắt
+    ('Huy') -> thiếu sapo thì merge_aliases không có tên dài để gộp, danh sách chỉ còn 'Huy'."""
+    head = [p.strip().rstrip(' .') for p in (doc.metadata.get('title', ''), doc.metadata.get('abstract', ''))]
+    return ' . '.join([p for p in head if p] + [doc.page_content.strip()])
+
+
+def run_ner(articles, path, save_every=1000, block=64):
+    """NER theo khối `block` bài, lưu {guid: {TYPE: [tên, ...]}}. Chạy tiếp được nếu bị ngắt (bỏ qua bài đã có)."""
     from tqdm.auto import tqdm
 
     entities = read_json(path) if path.exists() else {}
@@ -93,10 +107,15 @@ def run_ner(articles, path, save_every=1000):
     print(f'NER: còn {len(todo)}/{len(articles)} bài')
     if todo:
         ner = NER()
-        for i, d in enumerate(tqdm(todo, desc='NER'), 1):
-            entities[d.metadata['guid']] = ner(d.page_content)
-            if i % save_every == 0:
+        bar = tqdm(total=len(todo), desc='NER')
+        for start in range(0, len(todo), block):
+            docs = todo[start:start + block]
+            for d, ents in zip(docs, ner.extract([ner_text(d) for d in docs])):
+                entities[d.metadata['guid']] = ents
+            bar.update(len(docs))
+            if (start // block + 1) % max(save_every // block, 1) == 0:
                 write_json(entities, path)
+        bar.close()
         write_json(entities, path)
     missing = {d.metadata['guid'] for d in articles} - entities.keys()
     assert not missing, f'entities.json thiếu {len(missing)} bài'

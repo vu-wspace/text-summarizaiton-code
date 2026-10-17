@@ -13,9 +13,9 @@ TYPE_WORDS = {
     'LOCATION': ['địa điểm', 'địa danh', 'nơi'],
     'ORGANIZATION': ['tổ chức', 'cơ quan', 'công ty'],
 }
-TYPE_STRIP = re.compile(
-    r'^(các|những)?\s*(người|nhân vật|tên|địa điểm|địa danh|nơi|tổ chức|cơ quan|công ty|thực thể)'
-    r'\s*(có|xuất hiện)?\s*(trong|của|ở)?\s*', re.I)
+_TYPE = r'(?:các|những)?\s*(?:người|nhân vật|tên|địa điểm|địa danh|nơi|tổ chức|cơ quan|công ty|thực thể)\b'
+# Cụm chỉ loại ở ĐẦU payload, có thể nhiều loại: 'người và tổ chức trong ...', 'địa điểm, cơ quan có trong ...'
+TYPE_STRIP = re.compile(rf'^{_TYPE}(?:\s*(?:,|và|cùng)?\s*{_TYPE})*\s*(?:có|xuất hiện)?\s*(?:trong|của|ở)?\s*', re.I)
 
 QA, LIST, SUMMARIZE_TOPIC, SUMMARIZE_TEXT = 'qa', 'list', 'summarize_topic', 'summarize_text'
 
@@ -38,9 +38,11 @@ def route(message, min_text_len=C.SUM_MIN_TEXT):
 
 
 def wanted_types(payload):
-    """'Liệt kê địa điểm trong ...' -> ['LOCATION']; không nêu loại -> None (lấy hết)."""
-    p = payload.lower()
-    return [t for t, ws in TYPE_WORDS.items() if any(w in p for w in ws)] or None
+    """'Liệt kê địa điểm trong ...' -> ['LOCATION']; không nêu loại -> None (lấy hết).
+    Chỉ xét cụm chỉ loại ở đầu: 'địa điểm trong vụ cháy công ty X' không được tính thêm ORGANIZATION."""
+    m = TYPE_STRIP.match(payload)
+    p = m.group(0).lower() if m else ''
+    return [t for t, ws in TYPE_WORDS.items() if any(re.search(rf'\b{w}\b', p) for w in ws)] or None
 
 
 def strip_type_words(payload):
