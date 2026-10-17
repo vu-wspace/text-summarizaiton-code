@@ -137,33 +137,3 @@ class Models:
                 self.torch.cuda.ipc_collect()
         except Exception:
             pass
-
-    def unload_all(self):
-        """Giải phóng toàn bộ VRAM: embedding, re-ranker, ViT5, LLM."""
-        # Move models to CPU before releasing
-        for attr in ('_emb', '_rerank'):
-            model = getattr(self, attr, None)
-            if model is not None:
-                try:
-                    if hasattr(model, 'to'):
-                        model.to('cpu')
-                except Exception:
-                    pass
-                setattr(self, attr, None)
-        # ViT5 là tuple (tok, model)
-        if self._sum is not None:
-            try:
-                tok, model = self._sum
-                if hasattr(model, 'to'):
-                    model.to('cpu')
-            except Exception:
-                pass
-            self._sum = None
-        self.llm.unload()
-        gc.collect()
-        try:
-            if self.torch.cuda.is_available():
-                self.torch.cuda.empty_cache()
-                self.torch.cuda.ipc_collect()
-        except Exception:
-            pass
