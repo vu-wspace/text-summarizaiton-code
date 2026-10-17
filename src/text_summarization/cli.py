@@ -178,12 +178,21 @@ def cmd_contexts(args, paths):
 
 
 def cmd_answer(args, paths):
-    from .compare import contexts_path, run_llm, save_answers
-    from .data import read_jsonl
+    from .compare import contexts_path, run_llm, save_answers, build_contexts
+    from .data import read_jsonl, write_jsonl
 
-    ctx = read_jsonl(contexts_path(paths.questions_dir))
+    qdir = paths.questions_dir
+    if not contexts_path(qdir).exists():
+        rag = build_pipeline(paths, args)
+        write_jsonl(build_contexts(rag, read_jsonl(qdir / args.name)), contexts_path(qdir))
+        print(f'  -> {contexts_path(qdir)}')
+        rag.models.unload_all()
+        del rag
+        _free_gpu()
+    ctx = read_jsonl(contexts_path(qdir))
+
     rows, meta = run_llm(args.llm, ctx, load_4bit=args.llm_4bit, verbose=args.verbose)
-    save_answers(paths.questions_dir, args.llm, rows, meta)
+    save_answers(qdir, args.llm, rows, meta)
 
 
 def cmd_report(args, paths):
@@ -319,6 +328,7 @@ def main(argv=None):
     p.set_defaults(func=cmd_contexts)
 
     p = sub.add_parser('answer', help='1 LLM trả lời trên contexts.jsonl -> answers_<llm>.jsonl')
+    p.add_argument('--name', default='questions.jsonl', help='file câu hỏi trong OUTPUT_QUESTIONS/ (mặc định questions.jsonl)')
     llm_opts(p)
     p.set_defaults(func=cmd_answer)
 
