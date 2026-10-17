@@ -75,7 +75,9 @@ class QdrantStore:
         with open(chunks_path, 'rb') as f:
             self.chunks = pickle.load(f)          # list[langchain Document]
         if not client.collection_exists(collection):
-            raise ValueError(f'Chưa có collection {collection!r}. Chạy: python -m text_summarization index --steps index')
+            where = f'Qdrant server {C.QDRANT_URL}' if C.QDRANT_URL else 'Qdrant nhúng (OUTPUT_INDEX/qdrant)'
+            raise ValueError(f'{where} chưa có collection {collection!r}. Index dựng bằng Docker thì đặt '
+                             'RAG_QDRANT_URL=http://localhost:6333; nếu không, chạy: vietnews index --steps index')
         self.dim = client.get_collection(collection).config.params.vectors[DENSE].size
         n = client.count(collection, exact=True).count
         if n != len(self.chunks):

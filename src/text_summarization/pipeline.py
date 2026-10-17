@@ -33,9 +33,9 @@ class RAGPipeline:
             print(f'  · {msg}', file=sys.stderr, flush=True)
 
     # ----------------------------------------------------------- retriever + re-ranker
-    def retrieve(self, query, k=C.TOP_K, top_n=C.TOP_N_QA, rerank=True, mode=None):
+    def retrieve(self, query, k=C.TOP_K, top_n=None, rerank=True, mode=None):
         """Qdrant lấy top-k chunk (dense / BM25 / hybrid RRF), re-ranker chấm lại từng cặp (câu hỏi, chunk),
-        giữ top_n."""
+        xếp lại theo điểm, giữ top_n (None = giữ cả k)."""
         self.log(f'embedding + Qdrant ({mode or self.store.mode})')
         hits = self.store.search(self.models.embed_query(query), k, text=query, mode=mode)
         if not rerank or not hits:
@@ -94,7 +94,7 @@ class RAGPipeline:
     # ----------------------------------------------------------- tóm tắt / liệt kê
     def top_article(self, topic):
         """Bài chứa chunk top-1 sau re-rank."""
-        hits = self.retrieve(normalize_query(topic), top_n=C.TOP_K)
+        hits = self.retrieve(normalize_query(topic))
         guids = self.pick_articles(hits, n=1)
         return guids[0] if guids else None
 

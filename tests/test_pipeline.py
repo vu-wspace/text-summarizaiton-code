@@ -37,6 +37,13 @@ def test_answer_uses_context_and_reports_used_sources(articles):
     assert 'NGỮ CẢNH' in rag.models.calls[0] and 'CÂU HỎI: Huy lừa bao nhiêu?' in rag.models.calls[0]
 
 
+def test_prepare_takes_articles_from_all_reranked_chunks(articles):
+    # 3 chunk tốt nhất cùng thuộc bài 1 -> vẫn phải lấy được bài 2, 3 từ các chunk sau (5 chunk -> 3 bài)
+    hits = [hit('1', 'Huy lừa'), hit('1', 'Huy lừa'), hit('1', 'Huy lừa'), hit('2', 'đt'), hit('3', 'ch')]
+    _, _, used = make(articles, hits).prepare('Huy lừa ai?')
+    assert used[0] == '1' and sorted(used) == ['1', '2', '3']
+
+
 def test_answer_no_hits(articles):
     reply = make(articles, []).answer('gì đó')
     assert reply.text == NO_ANSWER and reply.sources == []

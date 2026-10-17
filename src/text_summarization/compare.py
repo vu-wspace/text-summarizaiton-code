@@ -45,7 +45,8 @@ def run_llm(key, contexts, load_4bit=False, verbose=False, max_new_tokens=256):
     import transformers
 
     llm = LLM(key, load_4bit=load_4bit, verbose=verbose)
-    cuda = torch.cuda.is_available()
+    server = llm.spec.loader == 'llama-server'
+    cuda = torch.cuda.is_available() and not server   # llama-server ở tiến trình khác: torch không đo được VRAM
     if cuda:
         torch.cuda.reset_peak_memory_stats()
     t0 = time.perf_counter()
@@ -62,7 +63,7 @@ def run_llm(key, contexts, load_4bit=False, verbose=False, max_new_tokens=256):
     meta = {'llm': key, 'repo': llm.spec.repo, 'prompt': llm.spec.prompt,
             'dtype': str(getattr(llm.model, 'dtype', '')), '4bit': load_4bit,
             'transformers': transformers.__version__, 'torch': torch.__version__,
-            'gpu': torch.cuda.get_device_name(0) if cuda else platform.processor() or 'cpu',
+            'gpu': torch.cuda.get_device_name(0) if torch.cuda.is_available() else platform.processor() or 'cpu',
             'peak_vram_gb': round(torch.cuda.max_memory_allocated() / 1e9, 2) if cuda else None,
             'load_seconds': round(load_s, 1)}
     llm.unload()

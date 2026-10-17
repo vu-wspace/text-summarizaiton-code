@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-# ----------------------------------------------------------------- mô hình (theo vietnamese_llm_rag_evaluation.md)
+# ----------------------------------------------------------------- mô hình
 # Embedding: vietnamese-bi-encoder (PhoBERT, 768 dim, tối đa 256 token, đầu vào PHẢI tách từ bằng pyvi)
 EMB_MODEL = 'bkai-foundation-models/vietnamese-bi-encoder'
 # Reranker: Vietnamese_Reranker (AITeamVN finetuned bge-reranker-v2-m3)
@@ -34,12 +34,11 @@ SEMANTIC_CHUNK_THRESHOLD = 0.75       # ngưỡng cosine similarity để tách 
 SEMANTIC_MIN_CHUNK_TOKENS = 64        # chunk nhỏ nhất (token)
 SEMANTIC_MAX_CHUNK_TOKENS = CHUNK_SIZE  # chunk lớn nhất (token)
 
-# ----------------------------------------------------------------- tham số retrieval (theo evaluation: top-5 -> rerank to 3)
-TOP_K = 5                 # retriever lấy 5 chunk (giảm từ 20)
+# ----------------------------------------------------------------- tham số retrieval (5 chunk -> re-rank -> 3 bài)
+TOP_K = 5                 # retriever lấy 5 chunk; k=20 tăng hit@3 0,94->0,96 nhưng giảm hit@1 0,89->0,86
 SEARCH_MODE = 'hybrid'    # dense | sparse | hybrid (dense + BM25, gộp RRF)
 PREFETCH = 20             # hybrid: mỗi nhánh lấy 20 chunk trước khi gộp RRF
-TOP_N_QA = 3              # re-ranker giữ 3 chunk cho nhánh hỏi đáp (theo evaluation)
-N_ARTICLES = 3            # small-to-big: 5 chunk -> 3 bài khác nhau
+N_ARTICLES = 3            # small-to-big: TOP_K chunk sau re-rank -> 3 bài khác nhau
 CTX_BUDGET = 3000         # token (tokenizer của LLM) cho ngữ cảnh
 
 QDRANT_URL = os.environ.get('RAG_QDRANT_URL', '')
@@ -81,8 +80,3 @@ class Paths:
     @property
     def qdrant_dir(self):          # Qdrant nhúng (khi không đặt RAG_QDRANT_URL)
         return self.index_dir / 'qdrant'
-
-    # --- OUTPUT_QUESTIONS
-    @property
-    def questions(self):
-        return self.questions_dir / 'questions.jsonl'

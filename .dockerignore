@@ -7,7 +7,6 @@ vietnews_raw
 # Không cần trong image
 models
 tools
-evaluation_results
 tests
 .venv
 .pytest_cache
