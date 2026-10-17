@@ -33,7 +33,7 @@ Hệ thống hỏi đáp tin tức tiếng Việt trên tập test **VietNews (2
 **Chạy Vistral-7B-Chat (mặc định)**: tải file GGUF vào `models/`, rồi bật llama.cpp server trước khi chạy `chat` / `ask` / `questions` / `evaluate`:
 
 ```bash
-llama-server -m models/Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192   # mặc định http://localhost:8080
+llama-server -m models/Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192 --port 8080   # code gọi http://localhost:8080
 # đổi địa chỉ server bằng biến môi trường RAG_LLAMA_URL
 ```
 
@@ -137,6 +137,17 @@ uv run vietnews ask "Tóm tắt vụ 2 tàu đối đầu ở Quảng Nam"
 
 Mặc định Qdrant chạy nhúng tại `OUTPUT_INDEX/qdrant`. Đặt `RAG_QDRANT_URL=http://localhost:6333` để dùng Qdrant server.
 
+> **Index dựng bằng Docker** (`docker compose run --rm rag index ...`) nằm trong service `qdrant`, **không** nằm trong `OUTPUT_INDEX/qdrant`. Khi chạy `uv run vietnews chat` thì phải trỏ tới server đó, nếu không sẽ gặp lỗi `Qdrant ... và chunks.pkl ... không khớp`:
+>
+> ```bat
+> :: CMD (không để dấu cách quanh "=")
+> chcp 65001
+> set RAG_QDRANT_URL=http://localhost:6333
+> uv run vietnews chat
+> ```
+>
+> PowerShell: `$env:RAG_QDRANT_URL = "http://localhost:6333"; uv run vietnews chat`
+
 ---
 
 ## 🐳 Chạy bằng Docker (GPU)
@@ -154,7 +165,7 @@ docker compose run --rm rag ask "Tóm tắt vụ 2 tàu đối đầu ở Quản
 - Vistral-7B-Chat: chạy `llama-server` trên máy host với `--host 0.0.0.0`, container gọi qua `RAG_LLAMA_URL=http://host.docker.internal:8080` (đã đặt sẵn trong `docker-compose.yml`):
 
 ```bat
-tools\llama-cpp\llama-server -m models\Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192 --host 0.0.0.0
+tools\llama-cpp\llama-server -m models\Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192 --port 8080 --host 0.0.0.0
 docker compose run --rm rag chat --llm vistral-7b-chat
 ```
 

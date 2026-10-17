@@ -79,8 +79,10 @@ class QdrantStore:
         self.dim = client.get_collection(collection).config.params.vectors[DENSE].size
         n = client.count(collection, exact=True).count
         if n != len(self.chunks):
-            raise ValueError(f'Qdrant ({n}) và chunks.pkl ({len(self.chunks)}) không khớp. '
-                             'Chạy lại: python -m text_summarization index --steps chunk,embed,index')
+            where = f'Qdrant server {C.QDRANT_URL}' if C.QDRANT_URL else 'Qdrant nhúng (OUTPUT_INDEX/qdrant)'
+            raise ValueError(f'{where} ({n}) và chunks.pkl ({len(self.chunks)}) không khớp. Nếu index đã dựng '
+                             'bằng Docker (service qdrant) thì đặt RAG_QDRANT_URL=http://localhost:6333; nếu không, '
+                             'nạp lại: vietnews index --steps index (hoặc chunk,embed,index nếu đổi mô hình)')
 
     def __len__(self):
         return len(self.chunks)

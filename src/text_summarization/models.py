@@ -36,6 +36,9 @@ class Models:
         if self.verbose:
             print(f'  · {msg}', file=sys.stderr, flush=True)
 
+    def _half(self):
+        return self.torch.bfloat16 if self.torch.cuda.is_bf16_supported() else self.torch.float16
+
     # ----------------------------------------------------------- vietnamese-bi-encoder (SentenceTransformer)
     def _embedder(self):
         if self._emb is None:
@@ -62,8 +65,10 @@ class Models:
             self.log(f'nạp re-ranker: {C.RERANK_MODEL}')
             from sentence_transformers import CrossEncoder
 
-            # CrossEncoder không có normalize_embeddings, dùng fp32 để chính xác
-            self._rerank = CrossEncoder(C.RERANK_MODEL, device=self.device)
+            # GPU: fp16 (BAAI khuyến nghị cho bge-reranker) -> 1,1 GB thay vì 2,3 GB, vừa VRAM còn lại khi
+            # Vistral chạy chung GPU 8 GB, và tránh lỗi "paging file is too small" trên Windows
+            kw = {'model_kwargs': {'dtype': self._half()}} if self.device == 'cuda' else {}
+            self._rerank = CrossEncoder(C.RERANK_MODEL, device=self.device, **kw)
         scores = self._rerank.predict([[query, t] for t in texts], batch_size=64, show_progress_bar=False)
         return [float(s) for s in scores]
 
@@ -74,7 +79,10 @@ class Models:
             from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
             tok = AutoTokenizer.from_pretrained(C.SUM_MODEL)
-            model = AutoModelForSeq2SeqLM.from_pretrained(C.SUM_MODEL).to(self.device).eval()
+            # T5 tràn số ở fp16 -> chỉ hạ xuống bf16 khi GPU hỗ trợ, còn lại giữ fp32
+            bf16 = self.device == 'cuda' and self.torch.cuda.is_bf16_supported()
+            model = AutoModelForSeq2SeqLM.from_pretrained(
+                C.SUM_MODEL, dtype=self.torch.bfloat16 if bf16 else self.torch.float32).to(self.device).eval()
             self._sum = (tok, model)
         tok, model = self._sum
         with self.torch.no_grad():

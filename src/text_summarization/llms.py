@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import time
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -91,7 +92,7 @@ LLMS = {s.key: s for s in [
             note='Llama-2 rút gọn 2,7B + tiếp tục huấn luyện tiếng Việt (vilm), khuôn ChatML, ngữ cảnh 4096'),
     LLMSpec('vistral-7b-chat', 'models/Vistral-7B-ChatML.i1-Q4_K_M.gguf', loader='llama-server', max_context=8192,
             note='Mistral-7B tinh chỉnh tiếng Việt (Viet-Mistral), bản ChatML GGUF Q4_K_M; repo gốc khoá nên chạy '
-                 'bằng llama.cpp: llama-server -m <gguf> -ngl 99 -c 8192 (RAG_LLAMA_URL, mặc định :8080)'),
+                 'bằng llama.cpp: llama-server -m <gguf> -ngl 99 -c 8192 --port 8080 (RAG_LLAMA_URL, mặc định :8080)'),
     LLMSpec('vietnamese-llama2-7b', 'bkai-foundation-models/vietnamese-llama2-7b-40GB', chat_template=PLAIN,
             max_context=4096,
             note='Llama-2-7B tiếp tục huấn luyện trên 40 GB tiếng Việt (BKAI); mô hình NỀN, không phải chat; '
@@ -101,6 +102,8 @@ LLMS = {s.key: s for s in [
 ABSTAIN_RE = re.compile(r'không biết|không (có|tìm thấy|đề cập)[^.]{0,40}(thông tin|trong ngữ cảnh)|'
                         r'không thể trả lời|từ chối trả lời|ngữ cảnh không', re.I)
 THINK_RE = re.compile(r'<think>.*?</think>', re.S)
+# Mô hình đôi khi tự viết tiếp lượt mới dưới dạng chữ thường ('...\n user\n[2] ...') -> stop không bắt được, cắt ở đây
+ROLE_LEAK_RE = re.compile(r'\n\s*(?:<\|im_start\|>)?\s*(?:user|assistant)\s*\n.*', re.S | re.I)
 
 
 def get_spec(key):
@@ -169,8 +172,11 @@ class LLM:
             with urllib.request.urlopen(LLAMA_URL + '/health', timeout=10):
                 pass
         except OSError as e:
+            # llama-server bản mới không còn mặc định cổng 8080 -> luôn ghi rõ --port khớp với LLAMA_URL
+            port = urllib.parse.urlsplit(LLAMA_URL).port or 8080
             raise SystemExit(f'Không kết nối được llama-server tại {LLAMA_URL} ({e}). Chạy trước:\n'
-                             f'  tools/llama-cpp/llama-server -m {self.spec.repo} -ngl 99 -c {self.spec.max_context}\n'
+                             f'  tools/llama-cpp/llama-server -m {self.spec.repo} -ngl 99 -c {self.spec.max_context}'
+                             f' --port {port}\n'
                              f'hoặc dùng LLM khác: --llm qwen2.5-3b') from None
 
     @property
@@ -258,7 +264,8 @@ class LLM:
             out = _post('/v1/chat/completions', {'messages': msgs, 'max_tokens': max_new_tokens, 'temperature': 0,
                                                  'repeat_penalty': repetition_penalty,
                                                  'stop': ['<|im_end|>', '<|im_start|>', '\nuser\n']})
-            return THINK_RE.sub('', out['choices'][0]['message']['content'] or '').strip()
+            text = THINK_RE.sub('', out['choices'][0]['message']['content'] or '')
+            return ROLE_LEAK_RE.sub('', text).strip()
         import torch
 
         model, tok = self.model, self.tokenizer

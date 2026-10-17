@@ -10,7 +10,7 @@
 #   docker compose run --rm rag --help
 #
 # Vistral-7B-Chat (GGUF) chạy bằng llama-server trên MÁY HOST, container gọi qua host.docker.internal:8080:
-#   tools\llama-cpp\llama-server -m models\Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192 --host 0.0.0.0
+#   tools\llama-cpp\llama-server -m models\Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192 --port 8080 --host 0.0.0.0
 #   docker compose run --rm rag chat --llm vistral-7b-chat
 #
 # So sánh LLM trên cùng bộ câu hỏi (OUTPUT_QUESTIONS/questions.jsonl):

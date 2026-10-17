@@ -27,9 +27,11 @@ from pathlib import Path
 os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')
 faulthandler.enable()   # crash ở tầng C vẫn in ra dòng Python gây lỗi
 
-# Fix Windows console encoding for Vietnamese characters in help text
+# Windows: stdin/stdout mặc định cp1252 khi không phải console gốc (pipe, Git Bash, terminal IDE) -> tiếng Việt
+# nhập vào bị hỏng, router không nhận ra "Tóm tắt" / "Liệt kê". Ép UTF-8; byte lạ giữ dạng surrogate cho clean_input.
 if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
     try:
+        sys.stdin.reconfigure(encoding='utf-8', errors='surrogateescape')
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
     except Exception:
