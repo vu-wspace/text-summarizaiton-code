@@ -189,15 +189,16 @@ Mọi LLM trả lời **cùng 40 câu với cùng ngữ cảnh** (truy xuất ch
 |---|---|---|---|---|---|---|---|---|
 | **vi-qwen2-3b-rag** (mặc định) | **0,69** | 0,55–0,82 | **0,91** | 0,22 | 0,00 | 55 | 188 | 3,5 |
 | qwen2.5-3b | 0,54 | 0,38–0,70 | 0,67 | 0,28 | 0,00 | 17 | 215 | 5,0 |
-| qwen3.5-2b-vie | — | — | — | — | — | — | — | 1,5 |
-| vistral-7b-chat | — | — | — | — | — | — | — | — |
+| vistral-7b-chat | 0,52 | 0,36–0,67 | 0,68 | 0,19 | 0,12 | 43 | 7,1 | — |
 | vinallama-2.7b-chat | 0,34 | 0,20–0,49 | 0,57 | 0,05 | 0,00 | 159 | 13,6 | 2,8 |
+| qwen3.5-2b-vie | — | — | — | — | — | — | — | 1,5 |
 | vietnamese-llama2-7b | — | — | — | — | — | — | — | 6,2 |
 
 Kiểm định McNemar từng cặp, có hiệu chỉnh Holm cho 15 phép so sánh:
 
 - `vi-qwen2-3b-rag` hơn **có ý nghĩa thống kê** so với qwen3.5-2b-vie (p = 0,018), vistral-7b-chat (p = 0,0006), vinallama và vietnamese-llama2 (p < 0,0001) — dựa trên đánh giá 100 câu trước đó.
 - So với `qwen2.5-3b` (40 câu): qwen2.5-3b nhanh hơn (215 vs 188s), F1 cao hơn (0,28 vs 0,22) nhưng **vi-qwen2-3b-rag cao hơn contains (0,69 vs 0,54) và recall (0,91 vs 0,67)** rõ rệt, dùng ít VRAM hơn (3,5 vs 5,0 GB) → được chọn làm mặc định.
+- **vistral-7b-chat** (GGUF Q4_K_M): contains 0,52 (thấp hơn vi-qwen2-3b-rag), từ chối 12% câu (trả "Tôi không biết"), nhanh nhất (7,1s), chạy llama-server trên CPU/GPU riêng.
 - **vinallama-2.7b-chat** trả lời rất dài (159 từ TB), contains thấp (0,34), F1 rất thấp (0,05), tuy nhanh (13,6s).
 - **Vistral-7B** từ chối 23% số câu dù bài đúng đã có trong ngữ cảnh (kết quả 100 câu).
 - **vietnamese-llama2-7b** là mô hình nền nên thường sinh ngay token kết thúc, cho câu trả lời rỗng.
