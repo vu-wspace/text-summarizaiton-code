@@ -207,7 +207,7 @@ def cmd_compare(args, paths):
         rag = build_pipeline(paths, args)
         write_jsonl(build_contexts(rag, read_jsonl(qdir / args.name)), contexts_path(qdir))
         print(f'  -> {contexts_path(qdir)}')
-        rag.models.llm.unload()
+        rag.models.unload_all()
         del rag                                       # giải phóng embedding + re-ranker trước khi nạp LLM
         _free_gpu()
     ctx = read_jsonl(contexts_path(qdir))

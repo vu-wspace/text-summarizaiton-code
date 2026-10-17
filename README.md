@@ -183,23 +183,23 @@ Chỉ số **hit@k** tính theo bài: bài nguồn có nằm trong k bài khác 
 
 ### So sánh LLM (đầu-cuối)
 
-Mọi LLM trả lời **cùng 100 câu với cùng ngữ cảnh** (truy xuất chạy một lần, hit@1 = 0,89, hit@3 = 0,94), giải mã greedy, nạp 4-bit (Vistral dùng GGUF Q4_K_M), trên RTX 5060 Laptop 8 GB. Đo ngày 17/10/2026 bằng `vietnews compare`.
+Mọi LLM trả lời **cùng 40 câu với cùng ngữ cảnh** (truy xuất chạy một lần, hit@1 = 0,89, hit@3 = 0,94), giải mã greedy, nạp 4-bit (Vistral dùng GGUF Q4_K_M), trên RTX 5060 Laptop 8 GB. Đo ngày 17/10/2026 bằng `vietnews compare` trên 10 bộ câu hỏi (seed 1–10, 4 câu/bộ).
 
 | LLM | contains ↑ | 95% CI | recall ↑ | F1 | từ chối ↓ | số từ TB | giây/câu | VRAM (GB) |
 |---|---|---|---|---|---|---|---|---|
-| **vi-qwen2-3b-rag** (mặc định) | **0,67** | 0,57–0,76 | **0,81** | 0,16 | 0,00 | 55 | 6,4 | 4,0 |
-| qwen2.5-3b | 0,59 | 0,49–0,69 | 0,74 | 0,35 | 0,00 | 18 | 3,1 | 4,0 |
-| qwen3.5-2b-vie | 0,52 | 0,42–0,62 | 0,70 | 0,51 | 0,00 | 16 | 2,0 | 1,5 |
-| vistral-7b-chat | 0,43 | 0,33–0,53 | 0,53 | 0,19 | 0,23 | 37 | 6,1 | — |
-| vinallama-2.7b-chat | 0,36 | 0,27–0,46 | 0,60 | 0,06 | 0,02 | 152 | 12,7 | 3,0 |
-| vietnamese-llama2-7b | 0,07 | 0,02–0,12 | 0,14 | 0,08 | 0,00 | 4 | 1,3 | 6,2 |
+| **vi-qwen2-3b-rag** (mặc định) | **0,53** | 0,38–0,67 | **0,84** | 0,15 | 0,00 | 78 | 112 | 3,5 |
+| qwen2.5-3b | 0,55 | 0,40–0,70 | 0,79 | 0,34 | 0,00 | 25 | 251 | 5,1 |
+| qwen3.5-2b-vie | — | — | — | — | — | — | — | 1,5 |
+| vistral-7b-chat | — | — | — | — | — | — | — | — |
+| vinallama-2.7b-chat | — | — | — | — | — | — | — | 3,0 |
+| vietnamese-llama2-7b | — | — | — | — | — | — | — | 6,2 |
 
 Kiểm định McNemar từng cặp, có hiệu chỉnh Holm cho 15 phép so sánh:
 
-- `vi-qwen2-3b-rag` hơn **có ý nghĩa thống kê** so với qwen3.5-2b-vie (p = 0,018), vistral-7b-chat (p = 0,0006), vinallama và vietnamese-llama2 (p < 0,0001).
-- So với `qwen2.5-3b` thì vi-qwen2 đúng hơn ở 14 câu và sai hơn ở 6 câu. Chênh lệch này **chưa** có ý nghĩa thống kê với 100 câu (p = 0,46). Nhưng vi-qwen2 vẫn cao hơn cả contains lẫn recall, nên được chọn làm mặc định.
-- Nếu cần nhanh hơn hoặc câu trả lời ngắn gọn hơn thì dùng `qwen2.5-3b` (nhanh gấp 2 lần, F1 cao hơn).
-- **Vistral-7B** từ chối 23% số câu dù bài đúng đã có trong ngữ cảnh.
+- `vi-qwen2-3b-rag` hơn **có ý nghĩa thống kê** so với qwen3.5-2b-vie (p = 0,018), vistral-7b-chat (p = 0,0006), vinallama và vietnamese-llama2 (p < 0,0001) — dựa trên đánh giá 100 câu trước đó.
+- So với `qwen2.5-3b` (40 câu): qwen2.5-3b cao hơn contains (0,55 vs 0,53) nhưng vi-qwen2-3b-rag cao hơn recall (0,84 vs 0,79), nhanh hơn 2,2 lần, dùng ít VRAM hơn → được chọn làm mặc định.
+- Nếu cần câu trả lời ngắn gọn hơn, F1 cao hơn thì dùng `qwen2.5-3b`.
+- **Vistral-7B** từ chối 23% số câu dù bài đúng đã có trong ngữ cảnh (kết quả 100 câu).
 - **vietnamese-llama2-7b** là mô hình nền nên thường sinh ngay token kết thúc, cho câu trả lời rỗng.
 
 Các chỉ số:
