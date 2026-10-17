@@ -162,7 +162,7 @@ def cmd_llms(args, paths):
         have = 'chưa cài'
     print(f'transformers trong môi trường này: {have}\n')
     for s in LLMS.values():
-        need = f'≥ {s.min_transformers}' + (f', < {s.max_transformers}' if s.max_transformers else '')
+        need = f'≥ {s.min_transformers}'
         print(f'  {s.key:16s} {s.repo:36s} prompt={s.prompt:6s} transformers {need:12s} service={s.service}\n'
               f'  {"":16s} {s.note}')
 
@@ -255,7 +255,8 @@ def main(argv=None):
 
     def llm_opts(p):
         p.add_argument('--llm', default=DEFAULT_LLM, choices=list(LLMS), help='LLM sinh câu trả lời')
-        p.add_argument('--llm-4bit', action='store_true', help='nạp LLM 4-bit (cần GPU NVIDIA)')
+        p.add_argument('--llm-4bit', action=argparse.BooleanOptionalAction, default=C.LLM_4BIT,
+                       help='nạp LLM 4-bit (GPU NVIDIA; mặc định bật, --no-llm-4bit để nạp bf16)')
         p.add_argument('--verbose', action='store_true', help='in từng bước đang chạy')
         p.add_argument('--search', default=C.SEARCH_MODE, choices=['dense', 'sparse', 'hybrid'],
                        help='kiểu truy xuất trên Qdrant (mặc định hybrid = dense + BM25, gộp RRF)')

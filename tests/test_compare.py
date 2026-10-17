@@ -10,7 +10,8 @@ from text_summarization import compare
 from text_summarization.cli import main
 from text_summarization.data import read_jsonl, write_jsonl
 from text_summarization.llms import LLM, LLMS, PROMPTS, _version_tuple, get_spec
-from text_summarization.metrics import aggregate, exact_match, score, token_f1, token_recall
+from text_summarization.metrics import (aggregate, bootstrap_ci, exact_match, holm, mcnemar, score, token_f1,
+                                        token_recall)
 from text_summarization.pipeline import RAGPipeline
 
 
@@ -27,9 +28,21 @@ def test_metrics():
                      keys=('contains', 'f1')) == {'contains': 0.5, 'f1': 0.75}
 
 
+def test_significance():
+    a = [1] * 6 + [0] * 14 + [1] * 30                  # A đúng B sai 6 câu, B đúng A sai 14 câu, cùng đúng 30
+    b = [0] * 6 + [1] * 14 + [1] * 30
+    n01, n10, p = mcnemar(a, b)
+    assert (n01, n10) == (6, 14) and p == pytest.approx(0.1153, abs=1e-4)
+    assert mcnemar([1, 0], [1, 0]) == (0, 0, 1.0)
+    assert holm([0.01, 0.04, 0.03]) == pytest.approx([0.03, 0.06, 0.06])
+    lo, hi = bootstrap_ci([1] * 50 + [0] * 50)
+    assert lo < 0.5 < hi and hi - lo < 0.25
+    assert bootstrap_ci([]) == (0.0, 0.0)
+
+
 # ----------------------------------------------------------------- danh sách LLM
 def test_registry_and_prompts():
-    assert set(LLMS) == {'qwen2.5-3b', 'vi-qwen2-3b-rag', 'qwen3.5-2b-vie', 'phogpt-4b-chat',
+    assert set(LLMS) == {'qwen2.5-3b', 'vi-qwen2-3b-rag', 'qwen3.5-2b-vie',
                          'vinallama-2.7b-chat', 'vistral-7b-chat', 'vietnamese-llama2-7b'}
     assert get_spec('vi-qwen2-3b-rag').prompt == 'vi-rag'
     assert get_spec('qwen3.5-2b-vie').loader == 'image-text'
@@ -109,27 +122,15 @@ def test_cli_answer_and_report(tmp_path, fake_torch, capsys):
     assert 'alphaedge-ai/Qwen3.5-2B-vie-32768' in capsys.readouterr().out
 
 
-def test_phogpt_prompt_and_version_range(monkeypatch):
+def test_transformers_version_check(monkeypatch):
     from text_summarization.llms import check_transformers
 
-    class Tok:
-        chat_template = 'x'
-
-        def apply_chat_template(self, msgs, **kw):
-            return msgs
-
-    llm = LLM('phogpt-4b-chat')
-    llm._tok = Tok()
-    system, user = PROMPTS['phogpt']
-    msgs = llm._prompt(system, user.format(context='C', question='Q?'))
-    assert [m['role'] for m in msgs] == ['user']                    # template PhoGPT không có vai system
-    assert 'Dựa vào văn bản sau đây:\nC' in msgs[0]['content']
-
-    spec = get_spec('phogpt-4b-chat')
-    for have, ok in [('4.44.2', True), ('4.57.6', False), ('4.39.0', False)]:
+    spec = get_spec('qwen3.5-2b-vie')                                # cần transformers >= 5.2 -> service llm5
+    for have, ok in [('5.2.0', True), ('5.10.1', True), ('4.57.6', False)]:
         monkeypatch.setitem(sys.modules, 'transformers', types.SimpleNamespace(__version__=have))
         if ok:
             check_transformers(spec)
         else:
-            with pytest.raises(SystemExit, match='service phogpt'):
+            with pytest.raises(SystemExit, match='service llm5'):
                 check_transformers(spec)
+    check_transformers(get_spec('vistral-7b-chat'))                  # llama-server: không cần transformers

@@ -15,9 +15,11 @@ EMB_MODEL = 'bkai-foundation-models/vietnamese-bi-encoder'
 RERANK_MODEL = 'AITeamVN/Vietnamese_Reranker'
 # Summarization
 SUM_MODEL = 'VietAI/vit5-large-vietnews-summarization'
-# LLM mặc định (danh sách ở llms.LLMS). Vistral-7B-Chat GGUF chạy qua llama-server -> phải bật server trước
-# (xem README); không có server thì dùng --llm qwen2.5-3b.
-DEFAULT_LLM = 'vistral-7b-chat'
+# LLM mặc định (danh sách ở llms.LLMS): Vi-Qwen2-3B-RAG, contains cao nhất trên 100 câu đánh giá (xem README).
+# Chạy thẳng bằng transformers, không cần llama-server.
+DEFAULT_LLM = 'vi-qwen2-3b-rag'
+# 4-bit mặc định: bf16 ~6,5 GB + embedding/re-ranker/ViT5 vượt GPU 8 GB; 4-bit ~3 GB. Tắt bằng --no-llm-4bit.
+LLM_4BIT = True
 # NER
 NER_MODEL = 'NlpHUST/ner-vietnamese-electra-base'
 

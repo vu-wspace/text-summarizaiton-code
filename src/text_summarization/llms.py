@@ -42,14 +42,6 @@ VIRAG_USER = (
     '### Câu hỏi :\n{question}\n\n'
     '### Trả lời :'
 )
-# 'phogpt': chat template của PhoGPT chỉ có lượt người dùng ("### Câu hỏi: ... ### Trả lời:"), không có vai system
-# -> đưa quy tắc vào chung lượt người dùng, theo khuôn hỏi đáp trên văn bản mà VinAI dùng làm ví dụ.
-PHOGPT_USER = (
-    'Dựa vào văn bản sau đây:\n{context}\n\n'
-    'Hãy trả lời câu hỏi: {question}\n'
-    'Chỉ dùng thông tin trong văn bản, trả lời ngắn gọn, giữ nguyên tên riêng, con số, ngày tháng. '
-    f'Nếu văn bản không có câu trả lời, chỉ trả lời: "{NO_ANSWER}"'
-)
 # Khuôn chat cho mô hình không kèm chat_template trong tokenizer
 CHATML = ("{% for m in messages %}<|im_start|>{{ m['role'] }}\n{{ m['content'] }}<|im_end|>\n{% endfor %}"
           "{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}")
@@ -57,7 +49,7 @@ CHATML = ("{% for m in messages %}<|im_start|>{{ m['role'] }}\n{{ m['content'] }
 PLAIN = ("{% for m in messages %}{{ m['content'] }}\n\n{% endfor %}"
          "{% if add_generation_prompt %}Trả lời:{% endif %}")
 
-PROMPTS = {'ours': (QA_SYSTEM, QA_USER), 'vi-rag': (VIRAG_SYSTEM, VIRAG_USER), 'phogpt': ('', PHOGPT_USER)}
+PROMPTS = {'ours': (QA_SYSTEM, QA_USER), 'vi-rag': (VIRAG_SYSTEM, VIRAG_USER)}
 
 
 @dataclass(frozen=True)
@@ -67,9 +59,7 @@ class LLMSpec:
     prompt: str = 'ours'
     loader: str = 'causal'           # 'causal' -> AutoModelForCausalLM | 'image-text' -> AutoModelForImageTextToText
     #                                  'llama-server' -> GGUF chạy bằng llama.cpp server (repo = đường dẫn .gguf)
-    min_transformers: str = '4.56'   # khoảng transformers nạp được mô hình: [min, max)
-    max_transformers: str = ''
-    trust_remote_code: bool = False  # mô hình tự mang code kiến trúc (PhoGPT: MPT của MosaicML)
+    min_transformers: str = '4.56'   # phiên bản transformers tối thiểu nạp được mô hình
     chat_template: str = ''          # ghi đè / bổ sung khi tokenizer không có chat_template
     max_context: int = 0             # > 0: cửa sổ ngữ cảnh ngắn (Llama-2: 4096) -> cắt ngữ cảnh cho vừa
     service: str = 'rag'             # service docker-compose có đúng phiên bản transformers
@@ -84,10 +74,6 @@ LLMS = {s.key: s for s in [
     LLMSpec('qwen3.5-2b-vie', 'alphaedge-ai/Qwen3.5-2B-vie-32768', loader='image-text', min_transformers='5.2',
             service='llm5',
             note='Qwen3.5-2B rút gọn từ vựng còn tiếng Việt (1,77B tham số); cần transformers ≥ 5.2'),
-    LLMSpec('phogpt-4b-chat', 'vinai/PhoGPT-4B-Chat', prompt='phogpt', min_transformers='4.40',
-            max_transformers='4.45', trust_remote_code=True, service='phogpt',
-            note='VinAI, 3,7B tham số huấn luyện từ đầu cho tiếng Việt, ngữ cảnh 8192; code MPT riêng chỉ chạy '
-                 'với transformers 4.4x (dùng lớp RoPE của Llama đã bị xoá ở bản mới)'),
     LLMSpec('vinallama-2.7b-chat', 'vilm/vinallama-2.7b-chat', chat_template=CHATML, max_context=4096,
             note='Llama-2 rút gọn 2,7B + tiếp tục huấn luyện tiếng Việt (vilm), khuôn ChatML, ngữ cảnh 4096'),
     LLMSpec('vistral-7b-chat', 'models/Vistral-7B-ChatML.i1-Q4_K_M.gguf', loader='llama-server', max_context=8192,
@@ -122,13 +108,9 @@ def check_transformers(spec):
     import transformers
 
     have = transformers.__version__
-    v = _version_tuple(have)
-    too_old = v < _version_tuple(spec.min_transformers)
-    too_new = bool(spec.max_transformers) and v >= _version_tuple(spec.max_transformers)
-    if too_old or too_new:
-        need = f'≥ {spec.min_transformers}' + (f', < {spec.max_transformers}' if spec.max_transformers else '')
+    if _version_tuple(have) < _version_tuple(spec.min_transformers):
         raise SystemExit(
-            f'{spec.repo} cần transformers {need}, môi trường này có {have}.\n'
+            f'{spec.repo} cần transformers ≥ {spec.min_transformers}, môi trường này có {have}.\n'
             f'  → Chạy bước "answer" của mô hình này trong service {spec.service}:  '
             f'docker compose --profile {spec.service} run --rm {spec.service} answer --llm {spec.key}')
 
@@ -188,7 +170,7 @@ class LLM:
             check_transformers(self.spec)
             from transformers import AutoTokenizer
 
-            tok = AutoTokenizer.from_pretrained(self.spec.repo, trust_remote_code=self.spec.trust_remote_code)
+            tok = AutoTokenizer.from_pretrained(self.spec.repo)
             tok.padding_side = 'left'
             if tok.pad_token is None:
                 tok.pad_token = tok.eos_token
@@ -207,12 +189,10 @@ class LLM:
 
             self.log(f'nạp {self.spec.repo}')
             cuda = torch.cuda.is_available()
-            kw = {'device_map': 'auto' if cuda else None, 'trust_remote_code': self.spec.trust_remote_code}
-            # bf16 nếu GPU hỗ trợ (RTX 30+), fp16 cho T4, fp32 cho CPU.
-            # Đặt cả khi 4-bit: phần KHÔNG lượng tử hoá (embedding, LayerNorm, lm_head) mặc định nạp fp16,
-            # mà PhoGPT/MPT huấn luyện bf16 -> fp16 tràn số -> logits NaN -> sinh toàn token 0 (<unk>).
+            # bf16 nếu GPU hỗ trợ (RTX 30+), fp16 cho T4, fp32 cho CPU. Đặt cả khi 4-bit: phần KHÔNG lượng tử hoá
+            # (embedding, LayerNorm, lm_head) mặc định nạp fp16 -> mô hình huấn luyện bf16 có thể tràn số.
             half = torch.bfloat16 if cuda and torch.cuda.is_bf16_supported() else torch.float16
-            kw['dtype' if _version_tuple(T.__version__) >= (4, 56) else 'torch_dtype'] = half if cuda else torch.float32
+            kw = {'device_map': 'auto' if cuda else None, 'dtype': half if cuda else torch.float32}
             if self.load_4bit and cuda:
                 kw['quantization_config'] = T.BitsAndBytesConfig(
                     load_in_4bit=True, bnb_4bit_quant_type='nf4', bnb_4bit_compute_dtype=half)
@@ -241,6 +221,16 @@ class LLM:
 
     # ----------------------------------------------------------- sinh
     def _prompt(self, system, user):
+        """Prompt đã ghép khuôn chat. Prompt được mã hoá với add_special_tokens=False, nên với tokenizer cần BOS
+        (họ Llama: vinallama, vietnamese-llama2) mà khuôn chưa có thì tự thêm. Thiếu BOS, vietnamese-llama2-7b
+        sinh ngay </s> ở token đầu (câu trả lời rỗng)."""
+        text = self._render(system, user)
+        bos = self.tokenizer.bos_token
+        if bos and getattr(self.tokenizer, 'add_bos_token', False) and not text.startswith(bos):
+            text = bos + text
+        return text
+
+    def _render(self, system, user):
         msgs = ([{'role': 'system', 'content': system}] if system else []) + [{'role': 'user', 'content': user}]
         tok = self.tokenizer
         if self.spec.chat_template:
@@ -271,7 +261,7 @@ class LLM:
         model, tok = self.model, self.tokenizer
         inputs = tok([self._prompt(system, user)], return_tensors='pt', add_special_tokens=False).to(model.device)
         with torch.no_grad():
-            # use_cache=True: PhoGPT ghi use_cache=false trong config, không bật thì sinh rất chậm
+            # use_cache=True: một số config ghi use_cache=false, không bật thì sinh rất chậm
             out = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False, use_cache=True,
                                  repetition_penalty=repetition_penalty, pad_token_id=tok.pad_token_id)
         new = out[0, inputs['input_ids'].shape[1]:]

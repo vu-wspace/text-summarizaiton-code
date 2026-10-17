@@ -23,4 +23,4 @@ RUN pip install -r requirements.txt "numpy>=1.26,<2.3"
 COPY src ./src
 
 ENTRYPOINT ["python", "-m", "text_summarization"]
-CMD ["chat", "--llm-4bit"]
+CMD ["chat"]

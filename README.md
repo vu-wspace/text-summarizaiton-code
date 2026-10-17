@@ -35,7 +35,7 @@ Bạn: Liệt kê người trong vụ Hồ Xuân Huy giả danh công an lừa �
       │
  Ghép nguyên văn bài (≤ 3000 token)
       │
- LLM (mặc định Vistral-7B qua llama-server)
+ LLM (mặc định Vi-Qwen2-3B-RAG, 4-bit)
 ```
 
 **Lúc dựng kho (index):**
@@ -53,19 +53,18 @@ Bạn: Liệt kê người trong vụ Hồ Xuân Huy giả danh công an lừa �
 | Re-ranker | `AITeamVN/Vietnamese_Reranker` (bge-reranker-v2-m3 fine-tune tiếng Việt, fp16 trên GPU) | `config.RERANK_MODEL` |
 | Tóm tắt | `VietAI/vit5-large-vietnews-summarization` (≤ 1024 token vào, ≤ 256 ra, beam 4, bf16 trên GPU) | `config.SUM_MODEL` |
 | NER | `NlpHUST/ner-vietnamese-electra-base` (cửa sổ ≤ 400 token) | `config.NER_MODEL` |
-| LLM | Mặc định `vistral-7b-chat`; đổi bằng `--llm <key>` | `config.DEFAULT_LLM` |
+| LLM | Mặc định `vi-qwen2-3b-rag` (4-bit, ~4 GB VRAM); đổi bằng `--llm <key>` | `config.DEFAULT_LLM` |
 
-LLM có sẵn (`vietnews llms`):
+LLM có sẵn (`vietnews llms`), xếp theo kết quả đánh giá (xem [Kết quả đánh giá](#kết-quả-đánh-giá)):
 
 | Key | Repo | Ghi chú |
 |---|---|---|
-| `vistral-7b-chat` | `models/Vistral-7B-ChatML.i1-Q4_K_M.gguf` | **Mặc định**. GGUF chạy qua **llama-server** |
-| `qwen2.5-3b` | `Qwen/Qwen2.5-3B-Instruct` | Chạy thẳng bằng transformers, không cần server |
-| `vi-qwen2-3b-rag` | `AITeamVN/Vi-Qwen2-3B-RAG` | Fine-tune cho RAG tiếng Việt, prompt riêng |
-| `vinallama-2.7b-chat` | `vilm/vinallama-2.7b-chat` | ChatML, ngữ cảnh 4096 |
+| `vi-qwen2-3b-rag` | `AITeamVN/Vi-Qwen2-3B-RAG` | **Mặc định**. Qwen2-3B fine-tune cho RAG tiếng Việt, prompt riêng của AITeamVN |
+| `qwen2.5-3b` | `Qwen/Qwen2.5-3B-Instruct` | Trả lời ngắn gọn hơn, nhanh gấp đôi |
+| `qwen3.5-2b-vie` | `alphaedge-ai/Qwen3.5-2B-vie-32768` | Nhanh nhất; cần transformers ≥ 5.2 → service Docker `llm5` |
+| `vistral-7b-chat` | `models/Vistral-7B-ChatML.i1-Q4_K_M.gguf` | GGUF chạy qua **llama-server** (xem bên dưới) |
+| `vinallama-2.7b-chat` | `vilm/vinallama-2.7b-chat` | ChatML, ngữ cảnh 4096, trả lời dài dòng |
 | `vietnamese-llama2-7b` | `bkai-foundation-models/vietnamese-llama2-7b-40GB` | Mô hình nền (không phải chat), cần HF token |
-| `phogpt-4b-chat` | `vinai/PhoGPT-4B-Chat` | Cần transformers 4.44 → service Docker `phogpt` |
-| `qwen3.5-2b-vie` | `alphaedge-ai/Qwen3.5-2B-vie-32768` | Cần transformers ≥ 5.2 → service Docker `llm5` |
 
 ---
 
@@ -85,17 +84,7 @@ Bước `index` mất khoảng 20 phút cho NER và 20–25 phút cho chunk + em
 
 > **Qdrant ở đâu?** Mặc định là Qdrant nhúng tại `OUTPUT_INDEX/qdrant`, không cần server. Nhưng kho có 132.850 chunk nên Qdrant khuyên dùng server. Muốn dùng server thì chạy `docker compose up -d qdrant` và đặt `RAG_QDRANT_URL=http://localhost:6333` **cho cả lúc index lẫn lúc chat**.
 
-### 2. Bật llama-server (cho LLM mặc định Vistral)
-
-Tải file GGUF vào `models/` và [llama.cpp](https://github.com/ggml-org/llama.cpp/releases) vào `tools/llama-cpp/`, rồi mở một terminal riêng:
-
-```bat
-tools\llama-cpp\llama-server -m models\Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192 --port 8080
-```
-
-Cần ghi rõ `--port 8080`, vì bản llama-server mới không còn mặc định cổng này. Muốn đổi địa chỉ thì đặt `RAG_LLAMA_URL`. Nếu không muốn bật server thì chạy với `--llm qwen2.5-3b`.
-
-### 3. Chat
+### 2. Chat
 
 **Windows CMD** (không để dấu cách quanh `=`):
 
@@ -115,9 +104,23 @@ Bỏ dòng `RAG_QDRANT_URL` nếu dùng Qdrant nhúng. Các cách chạy khác:
 
 ```bash
 uv run vietnews ask "Tóm tắt vụ 2 tàu đối đầu ở Quảng Nam"   # hỏi một câu rồi thoát
-uv run vietnews chat --llm vi-qwen2-3b-rag --llm-4bit          # LLM khác, nạp 4-bit
+uv run vietnews chat --llm qwen2.5-3b                          # LLM khác
+uv run vietnews chat --no-llm-4bit                             # nạp bf16 (GPU ≥ 12 GB)
 uv run vietnews chat --search dense --verbose                  # chỉ dense, in từng bước
 ```
+
+LLM được nạp **4-bit** theo mặc định, vì bản bf16 cộng với embedding, re-ranker và ViT5 vượt quá GPU 8 GB.
+
+### Dùng Vistral-7B-Chat (tuỳ chọn)
+
+Tải file GGUF vào `models/` và [llama.cpp](https://github.com/ggml-org/llama.cpp/releases) vào `tools/llama-cpp/`. Bật server trong một terminal riêng, rồi chat với `--llm vistral-7b-chat`:
+
+```bat
+tools\llama-cpp\llama-server -m models\Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192 --port 8080
+uv run vietnews chat --llm vistral-7b-chat
+```
+
+Cần ghi rõ `--port 8080`, vì bản llama-server mới không còn mặc định cổng này. Muốn đổi địa chỉ thì đặt `RAG_LLAMA_URL`.
 
 ---
 
@@ -128,15 +131,13 @@ chcp 65001
 docker compose build
 docker compose up -d qdrant
 docker compose run --rm rag index                       # dựng kho vào service qdrant
-docker compose run --rm rag                             # chat (gọi llama-server trên máy host)
+docker compose run --rm rag                             # chat (vi-qwen2-3b-rag 4-bit)
 docker compose run --rm rag ask "Tóm tắt vụ 2 tàu đối đầu ở Quảng Nam"
 ```
 
-- Container gọi llama-server trên máy host qua `http://host.docker.internal:8080`. Vì vậy server phải được bật với thêm `--host 0.0.0.0`.
+- Với `--llm vistral-7b-chat`, container gọi llama-server trên máy host qua `http://host.docker.internal:8080`. Vì vậy server phải được bật với thêm `--host 0.0.0.0`.
 - Index dựng bằng Docker nằm trong volume `qdrant_data`, **không** nằm trong `OUTPUT_INDEX/qdrant`. Muốn chat bằng `uv` trên index này thì đặt `RAG_QDRANT_URL=http://localhost:6333`.
-- Các LLM cần phiên bản transformers khác chạy trong service riêng:
-  `docker compose --profile llm5 run --rm llm5 answer --llm qwen3.5-2b-vie`,
-  `docker compose --profile phogpt run --rm phogpt answer --llm phogpt-4b-chat --llm-4bit`.
+- `qwen3.5-2b-vie` cần transformers ≥ 5.2 nên chạy trong service riêng: `docker compose --profile llm5 run --rm llm5 answer --llm qwen3.5-2b-vie`.
 
 ---
 
@@ -180,27 +181,38 @@ Chỉ số **hit@k** tính theo bài: bài nguồn có nằm trong k bài khác 
 - Dense đơn thuần (vietnamese-bi-encoder) yếu hơn BM25 rất nhiều trên tin tức: câu hỏi chứa tên riêng và con số, nên khớp từ khoá chính xác hơn khớp ngữ nghĩa. Hybrid cộng với rerank cho kết quả tốt nhất.
 - Pipeline thật dùng top-5 chunk. Trên 100 câu, ngữ cảnh đưa cho LLM chứa bài đúng ở vị trí đầu 89% số câu, và trong 3 bài 94% số câu. Thử tăng lên top-20 thì hit@3 lên 0,96 nhưng hit@1 giảm xuống 0,86, nên giữ top-5.
 
-### Đầu-cuối (Vistral-7B-Chat Q4_K_M)
+### So sánh LLM (đầu-cuối)
 
-| hit@1 | hit@3 | contains | recall | F1 | từ chối | số từ TB |
-|---|---|---|---|---|---|---|
-| 0,88 | 0,94 | **0,41** | 0,52 | 0,18 | 0,23 | 36 |
+Mọi LLM trả lời **cùng 100 câu với cùng ngữ cảnh** (truy xuất chạy một lần, hit@1 = 0,89, hit@3 = 0,94), giải mã greedy, nạp 4-bit (Vistral dùng GGUF Q4_K_M), trên RTX 5060 Laptop 8 GB. Đo ngày 17/10/2026 bằng `vietnews compare`.
 
-Điểm yếu chính là **LLM**, không phải phần truy xuất. Có 94/100 câu mà bài đúng đã nằm trong ngữ cảnh, nhưng Vistral chỉ trả lời đúng 43% trong số đó. Có tới 23% số câu Vistral trả lời "không biết".
+| LLM | contains ↑ | 95% CI | recall ↑ | F1 | từ chối ↓ | số từ TB | giây/câu | VRAM (GB) |
+|---|---|---|---|---|---|---|---|---|
+| **vi-qwen2-3b-rag** (mặc định) | **0,67** | 0,57–0,76 | **0,81** | 0,16 | 0,00 | 55 | 6,4 | 4,0 |
+| qwen2.5-3b | 0,59 | 0,49–0,69 | 0,74 | 0,35 | 0,00 | 18 | 3,1 | 4,0 |
+| qwen3.5-2b-vie | 0,52 | 0,42–0,62 | 0,70 | 0,51 | 0,00 | 16 | 2,0 | 1,5 |
+| vistral-7b-chat | 0,43 | 0,33–0,53 | 0,53 | 0,19 | 0,23 | 37 | 6,1 | — |
+| vinallama-2.7b-chat | 0,36 | 0,27–0,46 | 0,60 | 0,06 | 0,02 | 152 | 12,7 | 3,0 |
+| vietnamese-llama2-7b | 0,07 | 0,02–0,12 | 0,14 | 0,08 | 0,00 | 4 | 1,3 | 6,2 |
 
-Kết quả so sánh LLM trên **cùng 100 câu, cùng ngữ cảnh** (`vietnews compare`, đo ngày 15/10/2026 với bộ truy xuất cũ bge-m3 + bge-reranker-v2-m3, LLM chạy 4-bit, hit@3 = 0,95):
+Kiểm định McNemar từng cặp, có hiệu chỉnh Holm cho 15 phép so sánh:
 
-| LLM | contains | recall | từ chối | giây/câu |
-|---|---|---|---|---|
-| vi-qwen2-3b-rag | **0,68** | 0,80 | 0,01 | 4,6 |
-| qwen2.5-3b | 0,60 | 0,74 | 0,01 | 4,5 |
-| qwen3.5-2b-vie | 0,49 | 0,66 | 0,00 | 1,9 |
-| vistral-7b-chat | 0,42 | 0,55 | 0,20 | 7,4 |
-| vinallama-2.7b-chat | 0,32 | 0,56 | 0,00 | 17,2 |
+- `vi-qwen2-3b-rag` hơn **có ý nghĩa thống kê** so với qwen3.5-2b-vie (p = 0,018), vistral-7b-chat (p = 0,0006), vinallama và vietnamese-llama2 (p < 0,0001).
+- So với `qwen2.5-3b` thì vi-qwen2 đúng hơn ở 14 câu và sai hơn ở 6 câu. Chênh lệch này **chưa** có ý nghĩa thống kê với 100 câu (p = 0,46). Nhưng vi-qwen2 vẫn cao hơn cả contains lẫn recall, nên được chọn làm mặc định.
+- Nếu cần nhanh hơn hoặc câu trả lời ngắn gọn hơn thì dùng `qwen2.5-3b` (nhanh gấp 2 lần, F1 cao hơn).
+- **Vistral-7B** từ chối 23% số câu dù bài đúng đã có trong ngữ cảnh.
+- **vietnamese-llama2-7b** là mô hình nền nên thường sinh ngay token kết thúc, cho câu trả lời rỗng.
 
-Muốn độ chính xác cao hơn thì chạy `--llm vi-qwen2-3b-rag --llm-4bit`.
+Các chỉ số:
 
-Chỉ số **contains** cho biết câu trả lời có chứa trọn đáp án chuẩn hay không (sau khi chuẩn hoá ngày tháng, dấu câu). Kết quả chi tiết từng câu nằm trong `OUTPUT_QUESTIONS/run_20261017/`.
+- **contains**: câu trả lời có chứa trọn đáp án chuẩn hay không (sau khi chuẩn hoá ngày tháng, dấu câu). Đây là chỉ số chính.
+- **recall**: tỉ lệ từ của đáp án chuẩn có trong câu trả lời.
+- **F1**: thấp khi câu trả lời dài dòng.
+
+Báo cáo đầy đủ, gồm kiểm định từng cặp và câu trả lời từng câu, được ghi vào `compare_report.md`:
+
+```bash
+uv run vietnews --questions-dir OUTPUT_QUESTIONS/<thư mục> compare --llms vi-qwen2-3b-rag,qwen2.5-3b,vinallama-2.7b-chat
+```
 
 ---
 
@@ -229,7 +241,7 @@ Chỉ số **contains** cho biết câu trả lời có chứa trọn đáp án 
 |---|---|
 | `Qdrant ... (71594) và chunks.pkl (132850) không khớp` | Đang đọc nhầm Qdrant. Index dựng bằng Docker thì đặt `RAG_QDRANT_URL=http://localhost:6333`; nếu không thì chạy `vietnews index --steps index`. |
 | `Không kết nối được llama-server tại http://localhost:8080` | Server chưa bật, hoặc bật mà thiếu `--port 8080`. |
-| `The paging file is too small (os error 1455)` | Windows hết bộ nhớ ảo. Đóng bớt ứng dụng, tăng pagefile, hoặc giảm `-c` của llama-server xuống 4096. |
+| `The paging file is too small (os error 1455)` / CUDA out of memory | Hết bộ nhớ. Giữ chế độ 4-bit mặc định, đóng bớt ứng dụng hoặc tăng pagefile. |
 | Tiếng Việt gõ vào bị lỗi, "Tóm tắt"/"Liệt kê" bị hiểu thành hỏi đáp | CMD chưa chạy `chcp 65001`. |
 | `Vector câu hỏi 768 chiều nhưng collection 1024 chiều` | Index dựng bằng mô hình embedding khác. Chạy `vietnews index --steps chunk,embed,index`. |
 
@@ -255,7 +267,7 @@ src/text_summarization/
 ├── metrics.py     # contains, recall, F1, EM, tỉ lệ từ chối
 └── compare.py     # so sánh nhiều LLM trên cùng ngữ cảnh
 tests/             # pytest, không cần GPU / mô hình thật
-Dockerfile, Dockerfile.llm5, Dockerfile.phogpt, docker-compose.yml
+Dockerfile, Dockerfile.llm5, docker-compose.yml
 pyproject.toml, uv.lock, requirements.txt (cho Docker)
 
 # Sinh ra khi chạy, không commit:
@@ -263,7 +275,7 @@ OUTPUT_LOAD/       data_article.json
 OUTPUT_INDEX/      entities.json, faiss_index/{chunks.pkl, embedds.npy}, qdrant/
 OUTPUT_QUESTIONS/  câu hỏi, kết quả chấm, báo cáo so sánh
 models/            file GGUF
-tools/llama-cpp/   llama-server
+tools/llama-cpp/   llama-server (chỉ cho vistral-7b-chat)
 ```
 
 ## Test

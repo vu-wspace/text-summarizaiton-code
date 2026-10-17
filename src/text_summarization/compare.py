@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .data import read_jsonl, write_jsonl
 from .llms import LLMS, LLM, get_spec
-from .metrics import METRICS, aggregate, score
+from .metrics import METRICS, aggregate, bootstrap_ci, holm, mcnemar, score
 
 
 def contexts_path(qdir):
@@ -61,7 +61,7 @@ def run_llm(key, contexts, load_4bit=False, verbose=False, max_new_tokens=256):
         rows.append({'id': c['id'], 'pred': pred, 'seconds': round(sec, 3)})
         print(f"  [{key}] [{c['id']}] {sec:5.1f}s  {pred[:100]}")
     meta = {'llm': key, 'repo': llm.spec.repo, 'prompt': llm.spec.prompt,
-            'dtype': str(getattr(llm.model, 'dtype', '')), '4bit': load_4bit,
+            'dtype': str(getattr(llm.model, 'dtype', '')), '4bit': load_4bit and not server,
             'transformers': transformers.__version__, 'torch': torch.__version__,
             'gpu': torch.cuda.get_device_name(0) if torch.cuda.is_available() else platform.processor() or 'cpu',
             'peak_vram_gb': round(torch.cuda.max_memory_allocated() / 1e9, 2) if cuda else None,
@@ -104,18 +104,36 @@ def score_all(contexts, results):
 
 
 def summary_table(contexts, scored, results):
-    lines = ['| LLM | contains ↑ | recall ↑ | F1 ↑ | EM ↑ | từ chối | số từ TB | giây/câu | VRAM (GB) |',
-             '|---|---|---|---|---|---|---|---|---|']
+    lines = ['| LLM | contains ↑ | 95% CI | recall ↑ | F1 ↑ | EM ↑ | từ chối | số từ TB | giây/câu | VRAM (GB) |',
+             '|---|---|---|---|---|---|---|---|---|---|']
     csv_rows = []
-    for key, rows in scored.items():
+    for key, rows in sorted(scored.items(), key=lambda kv: -aggregate(kv[1])['contains']):
         a = aggregate(rows)
+        lo, hi = bootstrap_ci([r['contains'] for r in rows])
         sec = sum(r['seconds'] for r in rows) / max(len(rows), 1)
         vram = results[key][1].get('peak_vram_gb')
-        lines.append(f"| {key} | {a['contains']:.2f} | {a['recall']:.2f} | {a['f1']:.2f} | {a['em']:.2f} | "
-                     f"{a['abstain']:.2f} | {a['words']:.1f} | {sec:.2f} | {vram if vram is not None else '—'} |")
-        csv_rows.append({'llm': key, **{k: round(a[k], 4) for k in METRICS},
-                         'seconds': round(sec, 3), 'peak_vram_gb': vram, 'n': len(rows)})
+        lines.append(f"| {key} | {a['contains']:.2f} | {lo:.2f}–{hi:.2f} | {a['recall']:.2f} | {a['f1']:.2f} | "
+                     f"{a['em']:.2f} | {a['abstain']:.2f} | {a['words']:.1f} | {sec:.2f} | "
+                     f"{vram if vram is not None else '—'} |")
+        csv_rows.append({'llm': key, **{k: round(a[k], 4) for k in METRICS}, 'contains_ci_lo': round(lo, 4),
+                         'contains_ci_hi': round(hi, 4), 'seconds': round(sec, 3), 'peak_vram_gb': vram,
+                         'n': len(rows)})
     return '\n'.join(lines), csv_rows
+
+
+def pairwise_table(scored):
+    """McNemar từng cặp trên contains (chỉ những câu cả 2 LLM cùng trả lời), p hiệu chỉnh Holm."""
+    keys, pairs = list(scored), []
+    by_id = {k: {r['id']: r['contains'] for r in scored[k]} for k in keys}
+    for i, a in enumerate(keys):
+        for b in keys[i + 1:]:
+            ids = sorted(by_id[a].keys() & by_id[b].keys())
+            pairs.append((a, b, *mcnemar([by_id[a][x] for x in ids], [by_id[b][x] for x in ids])))
+    adj = holm([p[4] for p in pairs])
+    lines = ['| A vs B | A đúng, B sai | B đúng, A sai | p | p (Holm) |', '|---|---|---|---|---|']
+    lines += [f"| {a} vs {b} | {n01} | {n10} | {p:.4f} | {f'**{q:.4f}**' if q < 0.05 else f'{q:.4f}'} |"
+              for (a, b, n01, n10, p), q in zip(pairs, adj)]
+    return '\n'.join(lines)
 
 
 def write_report(qdir, contexts, results):
@@ -134,14 +152,21 @@ def write_report(qdir, contexts, results):
           '- **contains**: đáp án chuẩn nằm trọn trong câu trả lời (chỉ số chính).',
           '- **recall**: tỉ lệ từ của đáp án chuẩn có trong câu trả lời (điểm từng phần).',
           '- **F1 / EM**: kiểu SQuAD, phạt câu trả lời dài dòng; LLM trả lời thành câu nên EM thường thấp.',
-          '- **từ chối**: tỉ lệ câu LLM nói không biết dù ngữ cảnh có bài đúng (khi hit@3 = 1 là mất điểm).', '',
-          '## Cấu hình', '', '| LLM | repo | prompt | dtype | 4-bit | transformers | GPU |',
-          '|---|---|---|---|---|---|---|']
-    if len({bool(m.get('4bit')) for _, m in results.values()}) > 1:
+          '- **từ chối**: tỉ lệ câu LLM nói không biết dù ngữ cảnh có bài đúng (khi hit@3 = 1 là mất điểm).',
+          '- **95% CI**: khoảng tin cậy bootstrap (10.000 lần, lấy mẫu lại theo câu hỏi).', '']
+    if len(scored) > 1:
+        md += ['## Kiểm định từng cặp (contains)', '',
+               'McNemar chính xác trên cùng bộ câu hỏi; **đậm** = khác biệt có ý nghĩa (p Holm < 0,05).', '',
+               pairwise_table(scored), '']
+    md += ['## Cấu hình', '', '| LLM | repo | prompt | dtype | 4-bit | transformers | GPU |',
+           '|---|---|---|---|---|---|---|']
+    # GGUF (llama-server) đã lượng tử hoá sẵn -> không tính là "khác chế độ"
+    if len({bool(m.get('4bit')) for _, m in results.values() if m.get('dtype') != 'gguf'}) > 1:
         md.insert(md.index('## Cấu hình'), '> ⚠ Các LLM chạy khác chế độ (bf16 và 4-bit): chênh lệch có thể do lượng tử hoá.\n')
     for key, (_, meta) in results.items():
+        quant = 'GGUF' if meta.get('dtype') == 'gguf' else ('có' if meta.get('4bit') else 'không')
         md.append(f"| {key} | {meta.get('repo', get_spec(key).repo)} | {meta.get('prompt', '')} | "
-                  f"{meta.get('dtype', '')} | {'có' if meta.get('4bit') else 'không'} | {meta.get('transformers', '')} | "
+                  f"{meta.get('dtype', '')} | {quant} | {meta.get('transformers', '')} | "
                   f"{meta.get('gpu', '')} |")
     md += ['', '## Từng câu', '']
     keys = list(scored)

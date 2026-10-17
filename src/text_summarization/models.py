@@ -3,7 +3,7 @@
     embed_query / embed_passages : vietnamese-bi-encoder (SentenceTransformer) -> retriever + indexing
     rerank                       : AITeamVN/Vietnamese_Reranker (CrossEncoder)        -> re-ranker
     summarize                    : ViT5-large vietnews                              -> tóm tắt
-    answer / chat / count_tokens : LLM chọn bằng --llm (default: Vistral-7B-Chat)   -> sinh câu trả lời
+    answer / chat / count_tokens : LLM chọn bằng --llm (mặc định: Vi-Qwen2-3B-RAG) -> sinh câu trả lời
 
 Pipeline chỉ gọi qua các hàm này, nên khi test có thể thay cả lớp bằng mô hình giả.
 """
@@ -65,8 +65,8 @@ class Models:
             self.log(f'nạp re-ranker: {C.RERANK_MODEL}')
             from sentence_transformers import CrossEncoder
 
-            # GPU: fp16 (BAAI khuyến nghị cho bge-reranker) -> 1,1 GB thay vì 2,3 GB, vừa VRAM còn lại khi
-            # Vistral chạy chung GPU 8 GB, và tránh lỗi "paging file is too small" trên Windows
+            # GPU: fp16 (BAAI khuyến nghị cho bge-reranker) -> 1,1 GB thay vì 2,3 GB, vừa VRAM còn lại khi LLM
+            # chạy chung GPU 8 GB, và tránh lỗi "paging file is too small" trên Windows
             kw = {'model_kwargs': {'dtype': self._half()}} if self.device == 'cuda' else {}
             self._rerank = CrossEncoder(C.RERANK_MODEL, device=self.device, **kw)
         scores = self._rerank.predict([[query, t] for t in texts], batch_size=64, show_progress_bar=False)
@@ -92,7 +92,7 @@ class Models:
                                  no_repeat_ngram_size=3, early_stopping=True)
         return tok.decode(out[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-    # ----------------------------------------------------------- LLM (Vistral-7B-Chat / Qwen2.5 / Vi-Qwen2-RAG / ...)
+    # ----------------------------------------------------------- LLM (Vi-Qwen2-RAG / Qwen2.5 / Vistral-7B-Chat / ...)
     def answer(self, question, context, max_new_tokens=256):
         self.log(f'sinh câu trả lời bằng {self.llm.spec.key}')
         return self.llm.answer(question, context, max_new_tokens)
