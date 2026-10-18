@@ -78,6 +78,9 @@ def cmd_chat(args, paths):
             msg = clean_input(input('Bạn: ')).strip()
         except (EOFError, KeyboardInterrupt):
             break
+        except (UnicodeDecodeError, UnicodeError) as e:
+            print(f'  ! Lỗi mã hoá terminal khi đọc input: {e}', file=sys.stderr)
+            continue
         if msg.lower() in {'exit', 'quit'}:
             break
         if msg:
