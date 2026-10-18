@@ -6,6 +6,7 @@ vietnews_raw/
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
 *.bak
 models/
 *.gguf
