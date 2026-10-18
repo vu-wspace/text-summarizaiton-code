@@ -63,7 +63,7 @@ class RAGPipeline:
         left = budget
         for g in guids:
             a = self.articles[g]
-            text = f"{a['title']} . {a['article']}"
+            text = f"{a['title']} . {a['abstract']} . {a['article']}"
             n = self.models.count_tokens(text)
             if n > left:
                 if parts:                       # đã có bài tốt hơn -> bỏ bài này
