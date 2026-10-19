@@ -16,9 +16,12 @@ B = 0.75
 WORD = re.compile(r'\w+')
 
 
+import itertools
+
+
 def terms(text):
     words = WORD.findall(unicodedata.normalize('NFC', text).lower())
-    return words + [f'{a}_{b}' for a, b in zip(words, words[1:])]
+    return words + [f'{a}_{b}' for a, b in itertools.pairwise(words)]
 
 
 def term_id(term):

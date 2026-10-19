@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
-from text_summarization.store import Hit  # noqa: E402
+from text_summarization.store import Hit
 
 
 class FakeModels:

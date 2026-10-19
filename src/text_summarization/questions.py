@@ -29,14 +29,14 @@ GEN_USER = (
     '2. Đáp án ngắn (tối đa 15 từ), CHÉP NGUYÊN VĂN từ đoạn văn (tên, số liệu, ngày tháng...).\n'
     '3. Chỉ trả về đúng một dòng JSON: {{"question": "...", "answer": "..."}}'
 )
-BAD_PHRASES = re.compile(r'đoạn văn|bài báo|bài viết|văn bản|thông tin trên|vụ việc này', re.I)
-YES_NO = re.compile(r'\b(có phải|phải không|đúng không|có đúng|hay không|có không)\b|\bkhông\s*\?$', re.I)
+BAD_PHRASES = re.compile(r'đoạn văn|bài báo|bài viết|văn bản|thông tin trên|vụ việc này', re.IGNORECASE)
+YES_NO = re.compile(r'\b(có phải|phải không|đúng không|có đúng|hay không|có không)\b|\bkhông\s*\?$', re.IGNORECASE)
 
 
 # ----------------------------------------------------------------- lọc (không cần mô hình)
 def parse_json(text):
     """Lấy object JSON đầu tiên trong output LLM (LLM nhỏ hay kèm chữ thừa / ```json)."""
-    m = re.search(r'\{.*?\}', text, re.S)
+    m = re.search(r'\{.*?\}', text, re.DOTALL)
     if not m:
         return None
     try:
@@ -138,7 +138,7 @@ def summary(res):
     n = len(res)
     if not n:
         return 'Không có câu nào.'
-    rate = lambda k: sum(bool(x[k]) for x in res) / n  # noqa: E731
+    rate = lambda k: sum(bool(x[k]) for x in res) / n
     return f"hit@1={rate('hit@1'):.2f}  hit@3={rate('hit@3'):.2f}  contains={rate('contains'):.2f}  (n={n})"
 
 
@@ -154,9 +154,11 @@ def article_rank(hits, guid):
     return None
 
 
-def retrieval_eval(pipeline, rows, modes=('dense', 'sparse', 'hybrid'), k=max(KS), rerank=True):
+def retrieval_eval(pipeline, rows, modes=('dense', 'sparse', 'hybrid'), k=None, rerank=True):
     """-> (per_question, summary). Mỗi câu embed 1 lần, dùng chung cho mọi chế độ.
     k = max(KS) chunk (không phải C.TOP_K) để hit@10 / hit@20 có nghĩa."""
+    if k is None:
+        k = max(KS)
     models, store = pipeline.models, pipeline.store
     per_q, ranks = [], {(m, s): [] for m in modes for s in (('retriever', 'rerank') if rerank else ('retriever',))}
     for r in rows:

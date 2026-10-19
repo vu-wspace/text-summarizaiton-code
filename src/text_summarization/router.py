@@ -4,8 +4,8 @@ import unicodedata
 
 from . import config as C
 
-LIST_RE = re.compile(r'^\s*(hãy\s+)?(liệt\s*kê|trích\s*xuất)\b[\s:,-]*', re.I)
-SUM_RE = re.compile(r'^\s*(hãy\s+)?(tóm\s*tắt|tóm\s*lược|tom\s*tat)\b[\s:,-]*', re.I)
+LIST_RE = re.compile(r'^\s*(hãy\s+)?(liệt\s*kê|trích\s*xuất)\b[\s:,-]*', re.IGNORECASE)
+SUM_RE = re.compile(r'^\s*(hãy\s+)?(tóm\s*tắt|tóm\s*lược|tom\s*tat)\b[\s:,-]*', re.IGNORECASE)
 
 LABELS = {'PERSON': 'Người', 'LOCATION': 'Địa điểm', 'ORGANIZATION': 'Tổ chức', 'MISCELLANEOUS': 'Khác'}
 TYPE_WORDS = {
@@ -15,7 +15,7 @@ TYPE_WORDS = {
 }
 _TYPE = r'(?:các|những)?\s*(?:người|nhân vật|tên|địa điểm|địa danh|nơi|tổ chức|cơ quan|công ty|thực thể)\b'
 # Cụm chỉ loại ở ĐẦU payload, có thể nhiều loại: 'người và tổ chức trong ...', 'địa điểm, cơ quan có trong ...'
-TYPE_STRIP = re.compile(rf'^{_TYPE}(?:\s*(?:,|và|cùng)?\s*{_TYPE})*\s*(?:có|xuất hiện)?\s*(?:trong|của|ở)?\s*', re.I)
+TYPE_STRIP = re.compile(rf'^{_TYPE}(?:\s*(?:,|và|cùng)?\s*{_TYPE})*\s*(?:có|xuất hiện)?\s*(?:trong|của|ở)?\s*', re.IGNORECASE)
 
 QA, LIST, SUMMARIZE_TOPIC, SUMMARIZE_TEXT = 'qa', 'list', 'summarize_topic', 'summarize_text'
 

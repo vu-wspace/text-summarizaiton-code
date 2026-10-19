@@ -39,8 +39,7 @@ def write_jsonl(rows, path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
-        for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False) + '\n')
+        f.writelines(json.dumps(r, ensure_ascii=False) + '\n' for r in rows)
 
 
 def load_articles(path):
@@ -84,7 +83,7 @@ def df_to_json(df, path):
 def check_normalize(df, n=2000, seed=0):
     """Đếm các mẫu lẽ ra phải hết sau chuẩn hoá (dùng `re` của Python, tránh RE2 của pandas 3)."""
     out = df['article'].sample(min(n, len(df)), random_state=seed).apply(normalize_text)
-    count = lambda pat: int(out.apply(lambda t: len(re.findall(pat, t))).sum())  # noqa: E731
+    count = lambda pat: int(out.apply(lambda t: len(re.findall(pat, t))).sum())
     print("Còn ' . ' + chữ thường:", count(rf' \. {LOWER_CLS}'))
     print('Còn ký tự vô hình    :', count(INVISIBLE))
     print("Còn '_'              :", count('_'))

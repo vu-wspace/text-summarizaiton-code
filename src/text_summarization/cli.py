@@ -31,15 +31,16 @@ faulthandler.enable()   # crash ở tầng C vẫn in ra dòng Python gây lỗi
 # nhập vào bị hỏng, router không nhận ra "Tóm tắt" / "Liệt kê". Ép UTF-8; byte lạ giữ dạng surrogate cho clean_input.
 if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
     try:
-        sys.stdin.reconfigure(encoding='utf-8', errors='surrogateescape')
+        if hasattr(sys.stdin, 'reconfigure'):
+            sys.stdin.reconfigure(encoding='utf-8', errors='surrogateescape')
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
-    except Exception:
+    except (OSError, AttributeError):
         pass
 
-from . import config as C                       # noqa: E402
-from .llms import DEFAULT_LLM, LLMS             # noqa: E402
-from .text import clean_input                   # noqa: E402
+from . import config as C
+from .llms import DEFAULT_LLM, LLMS
+from .text import clean_input
 
 
 def build_pipeline(paths, args):
@@ -145,7 +146,7 @@ def cmd_retrieval(args, paths):
 
 def _save_eval(rows, src, suffix='_eval'):
     from .data import write_jsonl
-    stem = src.stem[:-len('_eval')] if src.stem.endswith('_eval') else src.stem
+    stem = src.stem.removesuffix('_eval')
     out = src if not suffix else src.with_name(stem + suffix + src.suffix)
     write_jsonl(rows, out)
     print(f'  -> {out}')
@@ -181,7 +182,7 @@ def cmd_contexts(args, paths):
 
 
 def cmd_answer(args, paths):
-    from .compare import contexts_path, run_llm, save_answers, build_contexts
+    from .compare import build_contexts, contexts_path, run_llm, save_answers
     from .data import read_jsonl, write_jsonl
 
     qdir = paths.questions_dir
@@ -209,7 +210,13 @@ def cmd_report(args, paths):
 
 def cmd_compare(args, paths):
     """contexts (nếu chưa có / --refresh) -> answer cho từng LLM chạy được trong môi trường này -> report."""
-    from .compare import contexts_path, load_results, run_llm, save_answers, write_report
+    from .compare import (
+        contexts_path,
+        load_results,
+        run_llm,
+        save_answers,
+        write_report,
+    )
     from .data import read_jsonl, write_jsonl
     from .llms import check_transformers, get_spec
 

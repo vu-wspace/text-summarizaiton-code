@@ -1,11 +1,23 @@
-from text_summarization.router import (LIST, QA, SUMMARIZE_TEXT, SUMMARIZE_TOPIC, route,
-                                       strip_type_words, wanted_types)
-from text_summarization.text import clean_input, contains_answer, norm_answer, normalize_text
+from text_summarization.router import (
+    LIST,
+    QA,
+    SUMMARIZE_TEXT,
+    SUMMARIZE_TOPIC,
+    route,
+    strip_type_words,
+    wanted_types,
+)
+from text_summarization.text import (
+    clean_input,
+    contains_answer,
+    norm_answer,
+    normalize_text,
+)
 
 
 # ----------------------------------------------------------------- chuẩn hoá VietNews
 def test_normalize_vietnews():
-    s = 'Ông Bảo_Th . đưa​ xe 51 G -77256 , " nổ " v . v'
+    s = 'Ông Bảo_Th . đưa\u200b xe 51 G -77256 , " nổ " v . v'
     assert normalize_text(s, drop_caption=False) == 'Ông Bảo Th. đưa xe 51G-77256 , "nổ" v.v.'
 
 

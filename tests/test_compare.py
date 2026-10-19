@@ -10,8 +10,16 @@ from text_summarization import compare
 from text_summarization.cli import main
 from text_summarization.data import read_jsonl, write_jsonl
 from text_summarization.llms import LLM, LLMS, PROMPTS, _version_tuple, get_spec
-from text_summarization.metrics import (aggregate, bootstrap_ci, exact_match, holm, mcnemar, score, token_f1,
-                                        token_recall)
+from text_summarization.metrics import (
+    aggregate,
+    bootstrap_ci,
+    exact_match,
+    holm,
+    mcnemar,
+    score,
+    token_f1,
+    token_recall,
+)
 from text_summarization.pipeline import RAGPipeline
 
 
@@ -62,9 +70,12 @@ def test_answer_uses_model_specific_prompt(monkeypatch):
     assert seen['qwen2.5-3b'].startswith('NGỮ CẢNH:\nNGỮ')
 
 
+from typing import ClassVar
+
+
 # ----------------------------------------------------------------- luồng đầy đủ với LLM giả
 class FakeLLM:
-    REPLIES = {'qwen2.5-3b': 'Đáp án là 3,2 tỷ đồng.', 'vi-qwen2-3b-rag': 'Không biết.'}
+    REPLIES: ClassVar[dict] = {'qwen2.5-3b': 'Đáp án là 3,2 tỷ đồng.', 'vi-qwen2-3b-rag': 'Không biết.'}
 
     def __init__(self, key, load_4bit=False, verbose=False):
         self.spec = get_spec(key)

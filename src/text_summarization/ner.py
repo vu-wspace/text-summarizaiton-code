@@ -9,7 +9,11 @@ from .data import read_json, write_json
 class NER:
     def __init__(self, model_name=C.NER_MODEL, max_tok=C.NER_WINDOW, device=None):
         import torch
-        from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
+        from transformers import (
+            AutoModelForTokenClassification,
+            AutoTokenizer,
+            pipeline,
+        )
 
         if device is None:
             device = 0 if torch.cuda.is_available() else -1

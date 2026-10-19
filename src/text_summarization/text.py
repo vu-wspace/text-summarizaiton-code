@@ -4,7 +4,8 @@ import sys
 import unicodedata
 
 # Không dùng raw string: Python đổi \uXXXX thành ký tự thật -> chạy được với cả `re` lẫn RE2 (pandas 3).
-INVISIBLE = '[­​-‏⁠﻿]'
+# Ký tự không hiển thị (zero-width, soft-hyphen, bidi marks) -> dùng escape để tránh cảnh báo PLE2502
+INVISIBLE = '[\u00ad\u200b\u200c\u200d\u200e\u200f\u2060\ufeff]'
 ABBR = r'TP|Tp|BS|TS|ThS|PGS|GS|TT|Jr|[A-ZĐ][a-zđ]?'
 VN_LOWER = ('aàáảãạăằắẳẵặâầấẩẫậbcdđeèéẻẽẹêềếểễệfghiìíỉĩịjklmn'
             'oòóỏõọôồốổỗộơờớởỡợpqrstuùúủũụưừứửữựvwxyỳýỷỹỵz')

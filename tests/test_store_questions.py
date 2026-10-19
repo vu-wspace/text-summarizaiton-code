@@ -6,11 +6,19 @@ import pytest
 from conftest import FakeModels
 from langchain_core.documents import Document
 
+from text_summarization import sparse
 from text_summarization.data import read_jsonl
 from text_summarization.indexing import run_index
-from text_summarization import sparse
-from text_summarization.questions import (article_rank, check, generate, has_anchor, parse_json, pick_chunks,
-                                          rescore, retrieval_eval)
+from text_summarization.questions import (
+    article_rank,
+    check,
+    generate,
+    has_anchor,
+    parse_json,
+    pick_chunks,
+    rescore,
+    retrieval_eval,
+)
 from text_summarization.store import QdrantStore, build_index
 
 DATA = Path(__file__).parent / 'data'

@@ -86,10 +86,10 @@ LLMS = {s.key: s for s in [
 ]}
 
 ABSTAIN_RE = re.compile(r'không biết|không (có|tìm thấy|đề cập)[^.]{0,40}(thông tin|trong ngữ cảnh)|'
-                        r'không thể trả lời|từ chối trả lời|ngữ cảnh không', re.I)
-THINK_RE = re.compile(r'<think>.*?</think>', re.S)
+                        r'không thể trả lời|từ chối trả lời|ngữ cảnh không', re.IGNORECASE)
+THINK_RE = re.compile(r'<think>.*?</think>', re.DOTALL)
 # Mô hình đôi khi tự viết tiếp lượt mới dưới dạng chữ thường ('...\n user\n[2] ...') -> stop không bắt được, cắt ở đây
-ROLE_LEAK_RE = re.compile(r'\n\s*(?:<\|im_start\|>)?\s*(?:user|assistant)\s*\n.*', re.S | re.I)
+ROLE_LEAK_RE = re.compile(r'\n\s*(?:<\|im_start\|>)?\s*(?:user|assistant)\s*\n.*', re.DOTALL | re.IGNORECASE)
 
 
 def get_spec(key):

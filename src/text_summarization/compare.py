@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 from .data import read_jsonl, write_jsonl
-from .llms import LLMS, LLM, get_spec
+from .llms import LLM, LLMS, get_spec
 from .metrics import METRICS, aggregate, bootstrap_ci, holm, mcnemar, score
 
 
@@ -147,8 +147,10 @@ def write_report(qdir, contexts, results):
     h3 = sum(c['hit@3'] for c in contexts) / max(n, 1)
 
     md = [f'# So sánh LLM trên {n} câu hỏi', '',
-          f'Truy xuất (chung cho mọi LLM): **hit@1 = {h1:.2f}**, **hit@3 = {h3:.2f}**. '
-          'Mọi LLM nhận cùng một ngữ cảnh, nên khác biệt bên dưới chỉ do LLM.', '', table, '',
+          (
+              f'Truy xuất (chung cho mọi LLM): **hit@1 = {h1:.2f}**, **hit@3 = {h3:.2f}**. '
+              'Mọi LLM nhận cùng một ngữ cảnh, nên khác biệt bên dưới chỉ do LLM.'
+          ), '', table, '',
           '- **contains**: đáp án chuẩn nằm trọn trong câu trả lời (chỉ số chính).',
           '- **recall**: tỉ lệ từ của đáp án chuẩn có trong câu trả lời (điểm từng phần).',
           '- **F1 / EM**: kiểu SQuAD, phạt câu trả lời dài dòng; LLM trả lời thành câu nên EM thường thấp.',

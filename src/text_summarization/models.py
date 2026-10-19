@@ -117,16 +117,16 @@ class Models:
                 try:
                     if hasattr(model, 'to'):
                         model.to('cpu')
-                except Exception:
+                except (RuntimeError, AttributeError):
                     pass
                 setattr(self, attr, None)
         # ViT5 là tuple (tok, model)
         if self._sum is not None:
             try:
-                tok, model = self._sum
+                _tok, model = self._sum
                 if hasattr(model, 'to'):
                     model.to('cpu')
-            except Exception:
+            except (RuntimeError, AttributeError):
                 pass
             self._sum = None
         self.llm.unload()
@@ -135,5 +135,5 @@ class Models:
             if self.torch.cuda.is_available():
                 self.torch.cuda.empty_cache()
                 self.torch.cuda.ipc_collect()
-        except Exception:
+        except (RuntimeError, AttributeError):
             pass
