@@ -17,15 +17,15 @@ Hệ thống RAG tin tức tiếng Việt dựa trên kho kiểm thử **VietNew
 
 ## 🏆 Top-3 Model LLM Tốt Nhất
 
-Dựa trên kết quả thực nghiệm benchmark độc lập trên **100 câu hỏi đánh giá** (10 bộ x 10 câu hỏi sinh từ kho VietNews với cùng ngữ cảnh truy xuất: hit@1 = 0,89, hit@3 = 0,94):
+Dựa trên kết quả thực nghiệm benchmark độc lập trên **100 câu hỏi đánh giá** (10 bộ x 10 câu hỏi sinh từ kho VietNews với cùng ngữ cảnh truy xuất: hit@1 = 0,86, hit@3 = 0,96):
 
-| Thứ hạng | Model LLM | Contains ↑ | Recall ↑ | Faithfulness ↑ | Relevancy ↑ | Tốc độ | VRAM (4-bit) | Đánh giá & Khuyến nghị |
+| Thứ hạng | Model LLM | Contains ↑ | Recall ↑ | F1 ↑ | EM ↑ | Tốc độ | VRAM (4-bit) | Đánh giá & Khuyến nghị |
 |:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|---|
-| 🥇 **Top 1** | **`vi-qwen2-3b-rag`** *(Mặc định)* | **67.0%** | **0.81** | **0.000** | **0.200** | 6.43s | ~3.98 GB | **Độ chính xác cao nhất**, được fine-tune chuyên sâu cho RAG tiếng Việt bởi AITeamVN. Tỉ lệ trích xuất đúng đáp án tuyệt đối cao nhất. |
-| 🥈 **Top 2** | **`qwen2.5-3b`** | **59.0%** | **0.74** | **0.000** | **0.135** | 3.09s | ~4.01 GB | **Cân bằng & Trả lời súc tích**, tốc độ sinh nhanh gấp đôi Top 1 (~3.09s/câu), câu trả lời gọn gàng không thừa từ, phù hợp nhu cầu phản hồi nhanh. |
-| 🥉 **Top 3** | **`qwen3.5-2b-vie`** | **52.0%** | **0.70** | **0.000** | **0.075** | **2.00s** | **~1.54 GB** | **Siêu nhẹ & Nhanh nhất**, F1-score cao (0.51), VRAM chỉ tốn ~1.5 GB. Cực kỳ tối ưu cho các máy có cấu hình phần cứng / GPU khiêm tốn. |
+| 🥇 **Top 1** | **`vi-qwen2-3b-rag`** *(Mặc định)* | **0.67** | **0.81** | 0.16 | 0.00 | 6.10s | ~5.55 GB | **Độ chính xác cao nhất**, được fine-tune chuyên sâu cho RAG tiếng Việt bởi AITeamVN. Tỉ lệ trích xuất đúng đáp án tuyệt đối cao nhất. |
+| 🥈 **Top 2** | **`qwen2.5-3b`** | **0.59** | **0.74** | **0.35** | **0.06** | 3.06s | ~4.01 GB | **Cân bằng & Trả lời súc tích**, tốc độ sinh nhanh gấp đôi Top 1 (~3.06s/câu), câu trả lời gọn gàng không thừa từ, phù hợp nhu cầu phản hồi nhanh. |
+| 🥉 **Top 3** | **`qwen3.5-2b-vie`** | 0.52 | 0.70 | **0.51** | **0.29** | **1.82s** | **~1.54 GB** | **Siêu nhẹ & Nhanh nhất**, F1-score cao (0.51), VRAM chỉ tốn ~1.5 GB. Cực kỳ tối ưu cho các máy có cấu hình phần cứng / GPU khiêm tốn. |
 
-> 📌 *Các mô hình khác đã kiểm thử: `vistral-7b-chat` (GGUF, contains 43%, từ chối 23% câu dù có ngữ cảnh), `vinallama-2.7b-chat` (contains 36%, sinh dài dòng), `vietnamese-llama2-7b` (mô hình nền, không phù hợp hỏi đáp).*
+> 📌 *Các mô hình khác đã kiểm thử: `vistral-7b-chat` (GGUF, contains 0.43, từ chối 23% câu dù có ngữ cảnh), `vinallama-2.7b-chat` (contains 0.36, sinh dài dòng), `vietnamese-llama2-7b` (mô hình nền, không phù hợp hỏi đáp).*
 
 ---
 
@@ -180,16 +180,17 @@ Kiểm thử trên 100 câu hỏi với **cùng một ngữ cảnh truy xuất**
 
 | Tiêu chí | 🥇 vi-qwen2-3b-rag | 🥈 qwen2.5-3b | 🥉 qwen3.5-2b-vie |
 |---|:---:|:---:|:---:|
-| **Điểm Contains (Chính xác)** | **0.67 (67%)** | 0.59 (59%) | 0.52 (52%) |
+| **Điểm Contains (Chính xác)** | **0.67** | 0.59 | 0.52 |
 | **Recall** | **0.81** | 0.74 | 0.70 |
 | **F1 Score** | 0.16 | 0.35 | **0.51** |
-| **Tỉ lệ từ chối sai (Refusal)** | **0.00%** | **0.00%** | **0.00%** |
-| **Thời gian phản hồi TB** | 6.43s / câu | 3.09s / câu | **2.00s / câu** |
+| **EM (Exact Match)** | 0.00 | 0.06 | **0.29** |
+| **Tỉ lệ từ chối (Refusal)** | **0.00** | **0.00** | **0.00** |
+| **Thời gian phản hồi TB** | 6.10s / câu | 3.06s / câu | **1.82s / câu** |
 | **Số từ trung bình** | 55.4 từ | 17.9 từ | 15.7 từ |
-| **VRAM tiêu thụ (4-bit)** | ~3.98 GB | ~4.01 GB | **~1.54 GB** |
+| **VRAM tiêu thụ (4-bit)** | ~5.55 GB | ~4.01 GB | **~1.54 GB** |
 
 - **`vi-qwen2-3b-rag`** vượt trội về khả năng bóc tách đầy đủ dữ kiện ngữ cảnh thành câu trả lời tự nhiên.
-- **`qwen2.5-3b`** phản hồi ngắn gọn, tập trung thẳng vào trọng tâm câu hỏi, tiết kiệm 52% thời gian suy luận.
+- **`qwen2.5-3b`** phản hồi ngắn gọn, tập trung thẳng vào trọng tâm câu hỏi, tiết kiệm 50% thời gian suy luận.
 - **`qwen3.5-2b-vie`** cực kỳ tiết kiệm tài nguyên (1.5 GB VRAM), nhanh nhất, phù hợp triển khai edge hoặc server cấu hình thấp.
 
 ---
