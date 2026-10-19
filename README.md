@@ -35,13 +35,25 @@ Métrics này đo lường:
 - **Faithfulness**: Câu trả lời có trung thực với ngữ cảnh truy xuất không? (0-1, càng cao càng tốt)
 - **Relevancy**: Câu trả lời có liên quan đến câu hỏi không? (0-1, càng cao càng tốt)
 
+#### 🔧 Cấu hình greedy (mặc định, max_new_tokens=256)
+
 | Model | Faithfulness | Relevancy | File kết quả |
 |---|:---:|:---:|---|
 | `vi-qwen2-3b-rag` | **0.000** | **0.200** | `OUTPUT_QUESTIONS/compare100/answers_vi-qwen2-3b-rag_fr.jsonl` |
 | `qwen2.5-3b` | **0.000** | **0.135** | `OUTPUT_QUESTIONS/compare100/answers_qwen2.5-3b_fr.jsonl` |
 | `qwen3.5-2b-vie` | **0.000** | **0.075** | `OUTPUT_QUESTIONS/compare100/answers_qwen3.5-2b-vie_fr.jsonl` |
 
+#### 🔧 Cấu hình sampling (temperature=0.5, max_new_tokens=512, do_sample=True)
+
+| Model | Faithfulness | Relevancy | File kết quả |
+|---|:---:|:---:|---|
+| `vi-qwen2-3b-rag` | **0.000** | **0.200** | `OUTPUT_QUESTIONS/compare100/answers_vi-qwen2-3b-rag_temp05_fr.jsonl` |
+| `qwen2.5-3b` | **0.000** | **0.125** | `OUTPUT_QUESTIONS/compare100/answers_qwen2.5-3b_temp05_fr.jsonl` |
+| `qwen3.5-2b-vie` | — | — | *chưa đánh giá (cần transformers ≥ 5.2)* |
+
 > 📌 *Lưu ý:* Faithfulness = 0.000 cho cả 3 model do evaluator (`qwen2.5-3b`) chấm rất khắt khe — câu trả lời thường được đánh giá là không fully grounded trong ngữ cảnh. Relevancy cho thấy `vi-qwen2-3b-rag` sinh câu trả lời liên quan câu hỏi nhất (0.200).
+>
+> 📌 *Nhận xét về temperature=0.5:* Với `temperature=0.5, max_new_tokens=512`, cả 2 model đều cho câu trả lời ngắn gọn hơn, sát gold answer hơn, nhưng faithfulness vẫn = 0 do evaluator khắt khe. `vi-qwen2-3b-rag` duy trì relevancy 0.200; `qwen2.5-3b` giảm nhẹ xuống 0.125.
 
 ---
 
