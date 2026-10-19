@@ -19,13 +19,29 @@ Hệ thống RAG tin tức tiếng Việt dựa trên kho kiểm thử **VietNew
 
 Dựa trên kết quả thực nghiệm benchmark độc lập trên **100 câu hỏi đánh giá** (10 bộ x 10 câu hỏi sinh từ kho VietNews với cùng ngữ cảnh truy xuất: hit@1 = 0,89, hit@3 = 0,94):
 
-| Thứ hạng | Model LLM | Điểm Contains ↑ | Recall ↑ | Tốc độ | VRAM (4-bit) | Đánh giá & Khuyến nghị |
-|:---:|---|:---:|:---:|:---:|:---:|---|
-| 🥇 **Top 1** | **`vi-qwen2-3b-rag`** *(Mặc định)* | **67.0%** (0.67) | **0.81** | 6.43s | ~3.98 GB | **Độ chính xác cao nhất**, được fine-tune chuyên sâu cho RAG tiếng Việt bởi AITeamVN. Tỉ lệ trích xuất đúng đáp án tuyệt đối cao nhất. |
-| 🥈 **Top 2** | **`qwen2.5-3b`** | **59.0%** (0.59) | **0.74** | 3.09s | ~4.01 GB | **Cân bằng & Trả lời súc tích**, tốc độ sinh nhanh gấp đôi Top 1 (~3.09s/câu), câu trả lời gọn gàng không thừa từ, phù hợp nhu cầu phản hồi nhanh. |
-| 🥉 **Top 3** | **`qwen3.5-2b-vie`** | **52.0%** (0.52) | **0.70** | **2.00s** | **~1.54 GB** | **Siêu nhẹ & Nhanh nhất**, F1-score cao (0.51), VRAM chỉ tốn ~1.5 GB. Cực kỳ tối ưu cho các máy có cấu hình phần cứng / GPU khiêm tốn. |
+| Thứ hạng | Model LLM | Contains ↑ | Recall ↑ | Faithfulness ↑ | Relevancy ↑ | Tốc độ | VRAM (4-bit) | Đánh giá & Khuyến nghị |
+|:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|---|
+| 🥇 **Top 1** | **`vi-qwen2-3b-rag`** *(Mặc định)* | **67.0%** | **0.81** | **0.000** | **0.200** | 6.43s | ~3.98 GB | **Độ chính xác cao nhất**, được fine-tune chuyên sâu cho RAG tiếng Việt bởi AITeamVN. Tỉ lệ trích xuất đúng đáp án tuyệt đối cao nhất. |
+| 🥈 **Top 2** | **`qwen2.5-3b`** | **59.0%** | **0.74** | **0.000** | **0.135** | 3.09s | ~4.01 GB | **Cân bằng & Trả lời súc tích**, tốc độ sinh nhanh gấp đôi Top 1 (~3.09s/câu), câu trả lời gọn gàng không thừa từ, phù hợp nhu cầu phản hồi nhanh. |
+| 🥉 **Top 3** | **`qwen3.5-2b-vie`** | **52.0%** | **0.70** | **0.000** | **0.075** | **2.00s** | **~1.54 GB** | **Siêu nhẹ & Nhanh nhất**, F1-score cao (0.51), VRAM chỉ tốn ~1.5 GB. Cực kỳ tối ưu cho các máy có cấu hình phần cứng / GPU khiêm tốn. |
 
 > 📌 *Các mô hình khác đã kiểm thử: `vistral-7b-chat` (GGUF, contains 43%, từ chối 23% câu dù có ngữ cảnh), `vinallama-2.7b-chat` (contains 36%, sinh dài dòng), `vietnamese-llama2-7b` (mô hình nền, không phù hợp hỏi đáp).*
+
+---
+
+### 📈 Đánh giá Faithfulness & Relevancy (100 câu hỏi, evaluator: `qwen2.5-3b`)
+
+Métrics này đo lường:
+- **Faithfulness**: Câu trả lời có trung thực với ngữ cảnh truy xuất không? (0-1, càng cao càng tốt)
+- **Relevancy**: Câu trả lời có liên quan đến câu hỏi không? (0-1, càng cao càng tốt)
+
+| Model | Faithfulness | Relevancy | File kết quả |
+|---|:---:|:---:|---|
+| `vi-qwen2-3b-rag` | **0.000** | **0.200** | `OUTPUT_QUESTIONS/compare100/answers_vi-qwen2-3b-rag_fr.jsonl` |
+| `qwen2.5-3b` | **0.000** | **0.135** | `OUTPUT_QUESTIONS/compare100/answers_qwen2.5-3b_fr.jsonl` |
+| `qwen3.5-2b-vie` | **0.000** | **0.075** | `OUTPUT_QUESTIONS/compare100/answers_qwen3.5-2b-vie_fr.jsonl` |
+
+> 📌 *Lưu ý:* Faithfulness = 0.000 cho cả 3 model do evaluator (`qwen2.5-3b`) chấm rất khắt khe — câu trả lời thường được đánh giá là không fully grounded trong ngữ cảnh. Relevancy cho thấy `vi-qwen2-3b-rag` sinh câu trả lời liên quan câu hỏi nhất (0.200).
 
 ---
 
