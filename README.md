@@ -196,6 +196,18 @@ Kiểm thử trên 100 câu hỏi với **cùng một ngữ cảnh truy xuất**
 - **`qwen2.5-3b`** phản hồi ngắn gọn, tập trung thẳng vào trọng tâm câu hỏi, tiết kiệm 50% thời gian suy luận.
 - **`qwen3.5-2b-vie`** cực kỳ tiết kiệm tài nguyên (1.5 GB VRAM), nhanh nhất, phù hợp triển khai edge hoặc server cấu hình thấp.
 
+**Tập sạch (bỏ câu hỏi mơ hồ):** 25/100 câu do LLM sinh bị gắn nhãn trong `OUTPUT_QUESTIONS/compare100/ambiguous.jsonl` (kèm lý do từng câu), **chỉ dựa trên câu hỏi + đáp án chuẩn, không nhìn kết quả của hệ thống**: 5 câu đáp án tương đối (*"Bốn tháng sau đó"*, *"hôm nay"*), 11 câu thiếu định danh (*"Thượng viện Mỹ thông qua đạo luật gì?"*), 9 câu hỏng (đáp án không trả lời câu hỏi). Chấm lại: `vietnews --questions-dir OUTPUT_QUESTIONS/compare100 report --exclude ambiguous.jsonl` -> `compare_report_clean.md`.
+
+| LLM | Contains (100 câu) | Contains (75 câu sạch) | Recall (sạch) | F1 (sạch) |
+|---|:---:|:---:|:---:|:---:|
+| `vi-qwen2-3b-rag` | 0.68 | **0.77** | **0.89** | 0.17 |
+| `qwen2.5-3b` | 0.60 | 0.72 | 0.85 | 0.36 |
+| `qwen3.5-2b-vie` | 0.49 | 0.56 | 0.75 | **0.56** |
+| `vistral-7b-chat` | 0.42 | 0.47 | 0.61 | 0.19 |
+| `vinallama-2.7b-chat` | 0.32 | 0.33 | 0.60 | 0.06 |
+
+Truy xuất trên tập sạch: hit@1 0.87, **ans@1 0.95, ans@3 1.00** (ngữ cảnh luôn chứa đáp án). Thứ hạng các LLM không đổi; phần còn thiếu của điểm contains chủ yếu nằm ở bước sinh câu trả lời, không phải truy xuất.
+
 **Prompt ngắn cho `vi-qwen2-3b-rag` (mặc định mới, `prompt='vi-rag-concise'`):** giữ nguyên khuôn prompt AITeamVN, chỉ thêm yêu cầu *"Trả lời bằng MỘT câu ngắn…"*. Cùng ngữ cảnh, chạy lại cả hai prompt trong cùng điều kiện:
 
 | Tập | Prompt | Contains | Recall | F1 | Số từ TB | Giây/câu |
@@ -221,7 +233,7 @@ Contains không khác biệt có ý nghĩa (McNemar p = 1.0 / 0.75), faithfulnes
 | `retrieval` | Đánh giá độ chuẩn xác truy xuất (hit@k, MRR) | `--modes dense,sparse,hybrid` |
 | `contexts` | Thu thập ngữ cảnh chung cho tập câu hỏi | `--name questions.jsonl` |
 | `answer` | Cho một LLM cụ thể trả lời trên contexts | `--llm <key>` |
-| `report` | Tổng hợp bảng so sánh, vẽ chỉ số và báo cáo | `--llms vi-qwen2-3b-rag,qwen2.5-3b` |
+| `report` | Tổng hợp bảng so sánh, vẽ chỉ số và báo cáo | `--llms vi-qwen2-3b-rag,qwen2.5-3b`, `--exclude ambiguous.jsonl` |
 | `compare` | Chạy trọn vẹn quy trình benchmark LLM | `--refresh` |
 | `judge` | LLM-as-a-judge: faithfulness + relevancy, kèm câu kiểm soát | `--judge vi-qwen2-3b-rag`, `--answers <keys>` |
 
@@ -251,7 +263,7 @@ text_summarization/
 │       ├── compare.py         # So sánh LLM trên cùng ngữ cảnh (contexts -> answer -> report)
 │       ├── metrics.py         # Chỉ số: contains, recall, F1, McNemar
 │       └── judge.py           # LLM-as-a-judge: faithfulness / relevancy + câu kiểm soát
-├── tests/                 # 68 bài test đơn vị (unit tests)
+├── tests/                 # 69 bài test đơn vị (unit tests)
 ├── OUTPUT_LOAD/           # data_article.json: kho 22.492 bài (sinh bởi `vietnews load`)
 ├── OUTPUT_INDEX/          # entities.json + vectors/{chunks.pkl, embedds.npy} (sinh bởi `vietnews index`)
 ├── OUTPUT_QUESTIONS/      # kết quả đánh giá
@@ -273,4 +285,4 @@ Chạy bộ test tự động (không yêu cầu GPU):
 ```bash
 uv run --group dev pytest
 ```
-*Kết quả:* Toàn bộ 68/68 unit tests đều pass trong ~1.5 giây.
+*Kết quả:* Toàn bộ 69/69 unit tests đều pass trong ~1.5 giây.

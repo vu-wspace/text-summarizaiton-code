@@ -134,6 +134,19 @@ def test_cli_answer_and_report(tmp_path, fake_torch, capsys):
     assert 'alphaedge-ai/Qwen3.5-2B-vie-32768' in capsys.readouterr().out
 
 
+def test_cli_report_exclude_writes_clean_report(tmp_path, capsys):
+    ctx = [{'id': i, 'question': 'Q?', 'answer': 'A', 'guid': '1', 'context': 'C', 'sources': ['1'],
+            'hit@1': True, 'hit@3': True} for i in (1, 2)]
+    write_jsonl(ctx, compare.contexts_path(tmp_path))
+    write_jsonl([{'id': 1, 'pred': 'A', 'seconds': 1.0}, {'id': 2, 'pred': 'B', 'seconds': 1.0}],
+                compare.answers_path(tmp_path, 'qwen2.5-3b'))
+    write_jsonl([{'id': 2, 'reason': 'malformed'}], tmp_path / 'ambiguous.jsonl')
+    main(['--questions-dir', str(tmp_path), 'report', '--exclude', 'ambiguous.jsonl'])
+    assert '| qwen2.5-3b | 1.00 |' in capsys.readouterr().out            # câu 2 (sai) đã bị bỏ
+    assert (tmp_path / 'compare_report_clean.md').exists() and not (tmp_path / 'compare_report.md').exists()
+    assert 'trên 1 câu hỏi' in (tmp_path / 'compare_report_clean.md').read_text(encoding='utf-8')
+
+
 def test_transformers_version_check(monkeypatch):
     from text_summarization.rag.llms import check_transformers
 

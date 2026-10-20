@@ -146,7 +146,8 @@ def pairwise_table(scored):
     return '\n'.join(lines)
 
 
-def write_report(qdir, contexts, results):
+def write_report(qdir, contexts, results, suffix=''):
+    """suffix: thêm vào tên file kết quả (vd. '_clean' khi chấm trên tập đã bỏ câu mơ hồ)."""
     qdir = Path(qdir)
     if not results:
         raise SystemExit('Chưa có file answers_*.jsonl nào. Chạy bước answer trước.')
@@ -207,12 +208,13 @@ def write_report(qdir, contexts, results):
                            'dung_that (0/1)': '', 'ghi_chu': ''})
         md.append('')
 
-    (qdir / 'compare_report.md').write_text('\n'.join(md), encoding='utf-8')
-    _write_csv(qdir / 'compare_summary.csv', csv_rows)
-    _write_csv(qdir / 'compare_review.csv', review)
+    report, summary, review_csv = (qdir / f'compare_{name}{suffix}.{ext}'
+                                   for name, ext in (('report', 'md'), ('summary', 'csv'), ('review', 'csv')))
+    report.write_text('\n'.join(md), encoding='utf-8')
+    _write_csv(summary, csv_rows)
+    _write_csv(review_csv, review)
     print(table)
-    print(f"  -> {qdir / 'compare_report.md'}\n  -> {qdir / 'compare_summary.csv'}"
-          f"\n  -> {qdir / 'compare_review.csv'}  (cột dung_that để chấm tay)")
+    print(f'  -> {report}\n  -> {summary}\n  -> {review_csv}  (cột dung_that để chấm tay)')
     return csv_rows
 
 

@@ -204,9 +204,14 @@ def cmd_report(args, paths):
     from .core.data import read_jsonl
     from .evaluation.compare import contexts_path, load_results, write_report
 
+    qdir = paths.questions_dir
     keys = _keys(args.llms) if args.llms else None
-    write_report(paths.questions_dir, read_jsonl(contexts_path(paths.questions_dir)),
-                 load_results(paths.questions_dir, keys))
+    contexts, suffix = read_jsonl(contexts_path(qdir)), ''
+    if args.exclude:                      # bỏ câu đã gắn nhãn (vd. mơ hồ) -> báo cáo riêng *_clean
+        drop = {r['id'] for r in read_jsonl(qdir / args.exclude)}
+        contexts, suffix = [c for c in contexts if c['id'] not in drop], '_clean'
+        print(f'Bỏ {len(drop)} câu trong {args.exclude} -> chấm trên {len(contexts)} câu')
+    write_report(qdir, contexts, load_results(qdir, keys), suffix)
 
 
 def cmd_compare(args, paths):
@@ -354,6 +359,7 @@ def main(argv=None):
 
     p = sub.add_parser('report', help='gộp + chấm mọi answers_*.jsonl')
     p.add_argument('--llms', default='', help='mặc định: mọi LLM đã có file answers_*.jsonl')
+    p.add_argument('--exclude', default='', help='file jsonl (trường id) các câu cần bỏ, vd. ambiguous.jsonl')
     p.set_defaults(func=cmd_report)
 
     p = sub.add_parser('compare', help='contexts + answer (nhiều LLM) + report')
