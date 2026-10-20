@@ -8,8 +8,8 @@ import re
 
 import numpy as np
 
-from . import config as C
-from .data import load_articles
+from ..core import config as C
+from ..core.data import load_articles
 from .store import build_index, connect
 
 SEPARATORS = ['\n\n', '\n', ' . ', ' ? ', ' ! ', ' … ', ' ; ', ' : ', ' , ', ' ', '']
@@ -71,20 +71,6 @@ def group_sentences(n_tok, sims=None, threshold=C.SEMANTIC_CHUNK_THRESHOLD,
 def adjacent_cosine(vecs):
     """Cosine giữa các vector liên tiếp (vector đã chuẩn hoá)."""
     return np.sum(vecs[:-1] * vecs[1:], axis=1)
-
-
-def semantic_split(text, tokenizer, embedder=None, threshold=C.SEMANTIC_CHUNK_THRESHOLD,
-                   min_tokens=C.SEMANTIC_MIN_CHUNK_TOKENS, max_tokens=C.SEMANTIC_MAX_CHUNK_TOKENS, segment=None):
-    """Semantic chunking 1 văn bản: tách câu, gộp các câu liên tiếp tương đồng thành chunk (văn bản gốc).
-    build_chunks dùng cùng các bước nhưng embed câu của nhiều bài trong một lô cho nhanh."""
-    sentences, seg, n_tok = split_sentences(text, tokenizer, max_tokens, segment or list)
-    if not sentences:
-        return [text] if text.strip() else []
-    sims = None
-    if embedder is not None and len(sentences) > 1:
-        sims = adjacent_cosine(embedder.encode(seg, convert_to_numpy=True, normalize_embeddings=True))
-    return [' '.join(sentences[i] for i in g)
-            for g in group_sentences(n_tok, sims, threshold, min_tokens, max_tokens)]
 
 
 def make_splitter(tokenizer, chunk_size=C.CHUNK_SIZE, chunk_overlap=C.CHUNK_OVERLAP):

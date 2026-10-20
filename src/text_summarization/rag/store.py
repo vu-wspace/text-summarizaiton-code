@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 from tqdm import tqdm
 
-from . import config as C
+from ..core import config as C
 from . import sparse
 
 DENSE, SPARSE = 'dense', 'bm25'
@@ -107,8 +107,9 @@ class QdrantStore:
             mode = 'dense'
         dense_q = np.asarray(vec, dtype='float32').reshape(-1).tolist()
         if len(dense_q) != self.dim:
-            raise ValueError(f'Vector câu hỏi {len(dense_q)} chiều nhưng collection {self.dim} chiều: index dựng bằng '
-                             f'mô hình embedding khác {C.EMB_MODEL}. Chạy lại: vietnews index --steps chunk,embed,index')
+            raise ValueError(f'Vector câu hỏi {len(dense_q)} chiều nhưng collection {self.dim} chiều: index dựng '
+                             f'bằng mô hình embedding khác {C.EMB_MODEL}. '
+                             'Chạy lại: vietnews index --steps chunk,embed,index')
 
         if mode == 'dense':
             res = self.client.query_points(self.collection, query=dense_q, using=DENSE, limit=k)

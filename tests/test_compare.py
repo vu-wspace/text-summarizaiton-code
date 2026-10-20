@@ -2,15 +2,15 @@
 import csv
 import sys
 import types
+from typing import ClassVar
 
 import pytest
 from conftest import FakeModels, FakeStore, hit
 
-from text_summarization import compare
 from text_summarization.cli import main
-from text_summarization.data import read_jsonl, write_jsonl
-from text_summarization.llms import LLM, LLMS, PROMPTS, _version_tuple, get_spec
-from text_summarization.metrics import (
+from text_summarization.core.data import read_jsonl, write_jsonl
+from text_summarization.evaluation import compare
+from text_summarization.evaluation.metrics import (
     aggregate,
     bootstrap_ci,
     exact_match,
@@ -20,7 +20,8 @@ from text_summarization.metrics import (
     token_f1,
     token_recall,
 )
-from text_summarization.pipeline import RAGPipeline
+from text_summarization.rag.llms import LLM, LLMS, PROMPTS, _version_tuple, get_spec
+from text_summarization.rag.pipeline import RAGPipeline
 
 
 # ----------------------------------------------------------------- chỉ số
@@ -52,11 +53,13 @@ def test_significance():
 def test_registry_and_prompts():
     assert set(LLMS) == {'qwen2.5-3b', 'vi-qwen2-3b-rag', 'qwen3.5-2b-vie',
                          'vinallama-2.7b-chat', 'vistral-7b-chat', 'vietnamese-llama2-7b'}
-    assert get_spec('vi-qwen2-3b-rag').prompt == 'vi-rag'
+    assert get_spec('vi-qwen2-3b-rag').prompt == 'vi-rag-concise'
+    concise = PROMPTS['vi-rag-concise'][1]                 # khuôn AITeamVN giữ nguyên, chỉ thêm 1 yêu cầu
+    assert concise.startswith(PROMPTS['vi-rag'][1].split('- Chỉ cần')[0]) and 'MỘT câu ngắn' in concise
     assert get_spec('qwen3.5-2b-vie').loader == 'image-text'
     with pytest.raises(SystemExit):
         get_spec('gpt-5')
-    for system, user in PROMPTS.values():                  # mọi prompt đều nhận đủ 2 trường
+    for _system, user in PROMPTS.values():                  # mọi prompt đều nhận đủ 2 trường
         assert '{' not in user.format(context='C', question='Q')
     assert _version_tuple('5.2.0.dev0') > _version_tuple('5.1.9') > _version_tuple('4.57.6')
 
@@ -69,8 +72,6 @@ def test_answer_uses_model_specific_prompt(monkeypatch):
     assert '### Ngữ cảnh :\nNGỮ' in seen['vi-qwen2-3b-rag'] and seen['vi-qwen2-3b-rag'].endswith('### Trả lời :')
     assert seen['qwen2.5-3b'].startswith('NGỮ CẢNH:\nNGỮ')
 
-
-from typing import ClassVar
 
 
 # ----------------------------------------------------------------- luồng đầy đủ với LLM giả
@@ -134,7 +135,7 @@ def test_cli_answer_and_report(tmp_path, fake_torch, capsys):
 
 
 def test_transformers_version_check(monkeypatch):
-    from text_summarization.llms import check_transformers
+    from text_summarization.rag.llms import check_transformers
 
     spec = get_spec('qwen3.5-2b-vie')                                # cần transformers >= 5.2 -> service llm5
     for have, ok in [('5.2.0', True), ('5.10.1', True), ('4.57.6', False)]:
@@ -145,3 +146,10 @@ def test_transformers_version_check(monkeypatch):
             with pytest.raises(SystemExit, match='service llm5'):
                 check_transformers(spec)
     check_transformers(get_spec('vistral-7b-chat'))                  # llama-server: không cần transformers
+
+
+def test_answer_hits_counts_answer_in_any_article():
+    ctx = '[1] Bài A nói về bão . Tâm bão cách bờ 450 km\n\n[2] Bài B . Gió giật cấp 12'
+    assert compare.answer_hits(ctx, '450 km') == (True, True)
+    assert compare.answer_hits(ctx, 'cấp 12') == (False, True)
+    assert compare.answer_hits('', 'x') == (False, False)

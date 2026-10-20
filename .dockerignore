@@ -17,3 +17,6 @@ __pycache__
 uv.lock
 .ipynb_checkpoints
 .git
+.ruff_cache
+.claude
+scripts

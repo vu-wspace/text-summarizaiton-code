@@ -2,8 +2,8 @@
 import re
 from collections import Counter, defaultdict
 
-from . import config as C
-from .data import read_json, write_json
+from ..core import config as C
+from ..core.data import read_json, write_json
 
 
 class NER:

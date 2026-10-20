@@ -6,10 +6,8 @@ import pytest
 from conftest import FakeModels
 from langchain_core.documents import Document
 
-from text_summarization import sparse
-from text_summarization.data import read_jsonl
-from text_summarization.indexing import run_index
-from text_summarization.questions import (
+from text_summarization.core.data import read_jsonl
+from text_summarization.evaluation.questions import (
     article_rank,
     check,
     generate,
@@ -19,7 +17,9 @@ from text_summarization.questions import (
     rescore,
     retrieval_eval,
 )
-from text_summarization.store import QdrantStore, build_index
+from text_summarization.rag import sparse
+from text_summarization.rag.indexing import run_index
+from text_summarization.rag.store import QdrantStore, build_index
 
 DATA = Path(__file__).parent / 'data'
 
@@ -105,7 +105,7 @@ def test_article_rank():
 
 
 def test_retrieval_eval(store, articles):
-    from text_summarization.pipeline import RAGPipeline
+    from text_summarization.rag.pipeline import RAGPipeline
 
     class M(FakeModels):
         def embed_query(self, text):

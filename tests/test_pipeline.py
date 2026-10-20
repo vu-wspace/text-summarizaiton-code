@@ -1,7 +1,7 @@
 import pytest
 from conftest import FakeModels, FakeStore, hit
 
-from text_summarization.pipeline import NO_ANSWER, NOT_FOUND, RAGPipeline
+from text_summarization.rag.pipeline import NO_ANSWER, NOT_FOUND, RAGPipeline
 
 
 def make(articles, hits, **kw):

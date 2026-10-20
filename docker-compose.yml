@@ -13,12 +13,13 @@
 #   tools\llama-cpp\llama-server -m models\Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 -c 8192 --port 8080 --host 0.0.0.0
 #   docker compose run --rm rag chat --llm vistral-7b-chat
 #
-# So sánh LLM trên cùng bộ câu hỏi (OUTPUT_QUESTIONS/questions.jsonl):
-#   docker compose run --rm rag contexts                              # truy xuất 1 lần -> contexts.jsonl
-#   docker compose run --rm rag answer --llm qwen2.5-3b
-#   docker compose run --rm rag answer --llm vi-qwen2-3b-rag
-#   docker compose --profile llm5 run --rm llm5 answer --llm qwen3.5-2b-vie   # transformers 5.x
-#   docker compose run --rm rag report                                # -> compare_report.md / .csv
+# So sánh LLM trên bộ benchmark 100 câu (OUTPUT_QUESTIONS/compare100/questions.jsonl):
+#   docker compose run --rm rag --questions-dir OUTPUT_QUESTIONS/compare100 contexts   # truy xuất 1 lần -> contexts.jsonl
+#   docker compose run --rm rag --questions-dir OUTPUT_QUESTIONS/compare100 answer --llm qwen2.5-3b
+#   docker compose run --rm rag --questions-dir OUTPUT_QUESTIONS/compare100 answer --llm vi-qwen2-3b-rag
+#   docker compose --profile llm5 run --rm llm5 --questions-dir OUTPUT_QUESTIONS/compare100 answer --llm qwen3.5-2b-vie
+#   docker compose run --rm rag --questions-dir OUTPUT_QUESTIONS/compare100 report      # -> compare_report.md / .csv
+#   docker compose run --rm rag --questions-dir OUTPUT_QUESTIONS/compare100 judge       # -> judge_<llm>/report.md
 
 services:
   rag:
@@ -27,7 +28,7 @@ services:
     stdin_open: true   # để gõ câu hỏi trong terminal
     tty: true
     environment:
-      - RAG_QDRANT_URL=http://qdrant:6333         # bỏ dòng này để dùng Qdrant nhúng (OUTPUT_INDEX/qdrant)
+      - RAG_QDRANT_URL=http://qdrant:6333         # bỏ dòng này để dùng Qdrant nhúng (OUTPUT_INDEX/qdrant, dựng bằng: index --steps index)
       - RAG_LLAMA_URL=http://host.docker.internal:8080   # llama-server trên máy host (cho vistral-7b-chat)
     extra_hosts:
       - "host.docker.internal:host-gateway"       # Linux cần dòng này; Docker Desktop đã có sẵn
@@ -35,7 +36,7 @@ services:
       - qdrant
     volumes:
       - ./OUTPUT_LOAD:/app/OUTPUT_LOAD            # data_article.json
-      - ./OUTPUT_INDEX:/app/OUTPUT_INDEX          # entities.json, faiss_index/{chunks.pkl, embedds.npy}, qdrant/
+      - ./OUTPUT_INDEX:/app/OUTPUT_INDEX          # entities.json, vectors/{chunks.pkl, embedds.npy}
       - ./OUTPUT_QUESTIONS:/app/OUTPUT_QUESTIONS  # câu hỏi sinh ra + kết quả chấm
       - hf_cache:/root/.cache/huggingface         # mô hình tải 1 lần, dùng lại
     deploy:

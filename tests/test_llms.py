@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from text_summarization.llms import CHATML, LLM, ROLE_LEAK_RE
+from text_summarization.rag.llms import CHATML, LLM, ROLE_LEAK_RE
 
 
 class FakeTok:
