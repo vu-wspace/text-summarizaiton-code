@@ -12,7 +12,7 @@ import sys
 
 import numpy as np
 
-from . import config as C
+from ..core import config as C
 from .llms import DEFAULT_LLM, LLM
 
 

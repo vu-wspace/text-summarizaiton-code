@@ -14,8 +14,8 @@ import random
 import re
 import sys
 
+from ..core.text import contains_answer, normalize_query
 from .metrics import token_recall
-from .text import contains_answer, normalize_query
 
 KS = (1, 3, 5, 10, 20)
 
@@ -138,7 +138,10 @@ def summary(res):
     n = len(res)
     if not n:
         return 'Không có câu nào.'
-    rate = lambda k: sum(bool(x[k]) for x in res) / n
+
+    def rate(k):
+        return sum(bool(x[k]) for x in res) / n
+
     return f"hit@1={rate('hit@1'):.2f}  hit@3={rate('hit@3'):.2f}  contains={rate('contains'):.2f}  (n={n})"
 
 

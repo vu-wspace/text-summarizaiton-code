@@ -16,12 +16,17 @@
     answer      1 LLM trả lời trên contexts.jsonl        -> answers_<llm>.jsonl
     report      gộp + chấm mọi answers_*.jsonl           -> compare_report.md / .csv
     compare     contexts + answer (nhiều LLM) + report trong một lệnh
+    judge       LLM-as-a-judge: faithfulness + relevancy -> judge_<llm>/report.md
 """
 import argparse
 import faulthandler
 import os
 import sys
 from pathlib import Path
+
+from .core import config as C
+from .core.text import clean_input
+from .rag.llms import DEFAULT_LLM, LLMS
 
 # Windows: torch và thư viện khác có thể mang thêm một bản OpenMP -> cho phép cùng tồn tại (vô hại trên Linux).
 os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')
@@ -38,16 +43,12 @@ if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
     except (OSError, AttributeError):
         pass
 
-from . import config as C
-from .llms import DEFAULT_LLM, LLMS
-from .text import clean_input
-
 
 def build_pipeline(paths, args):
-    from .data import read_json
-    from .models import Models
-    from .pipeline import RAGPipeline
-    from .store import QdrantStore, connect
+    from .core.data import read_json
+    from .rag.models import Models
+    from .rag.pipeline import RAGPipeline
+    from .rag.store import QdrantStore, connect
 
     store = QdrantStore(connect(paths), paths.chunks, mode=args.search)
     articles = read_json(paths.article)
@@ -60,12 +61,12 @@ def build_pipeline(paths, args):
 
 # ----------------------------------------------------------------- xây dựng
 def cmd_load(args, paths):
-    from .data import HF, run_load
+    from .core.data import HF, run_load
     run_load(paths, check=args.check, source=args.source or HF)
 
 
 def cmd_index(args, paths):
-    from .indexing import run_index
+    from .rag.indexing import run_index
     run_index(paths, steps=[s.strip() for s in args.steps.split(',') if s.strip()],
               chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap, header=args.header)
 
@@ -95,8 +96,8 @@ def cmd_ask(args, paths):
 
 # ----------------------------------------------------------------- đánh giá
 def cmd_questions(args, paths):
-    from .data import write_jsonl
-    from .questions import evaluate, generate
+    from .core.data import write_jsonl
+    from .evaluation.questions import evaluate, generate
 
     rag = build_pipeline(paths, args)
     print(f'Sinh {args.n} câu hỏi bằng {args.llm} (seed={args.seed})...')
@@ -109,8 +110,8 @@ def cmd_questions(args, paths):
 
 
 def cmd_evaluate(args, paths):
-    from .data import read_jsonl
-    from .questions import evaluate, rescore, summary
+    from .core.data import read_jsonl
+    from .evaluation.questions import evaluate, rescore, summary
 
     src = paths.questions_dir / args.name
     if args.rescore:                      # chỉ chấm lại cách so khớp, không chạy mô hình
@@ -125,8 +126,8 @@ def cmd_evaluate(args, paths):
 
 
 def cmd_retrieval(args, paths):
-    from .data import read_jsonl, write_jsonl
-    from .questions import KS, retrieval_eval, retrieval_table
+    from .core.data import read_jsonl, write_jsonl
+    from .evaluation.questions import KS, retrieval_eval, retrieval_table
 
     rag = build_pipeline(paths, args)
     modes = [m.strip() for m in args.modes.split(',') if m.strip()]
@@ -145,7 +146,7 @@ def cmd_retrieval(args, paths):
 
 
 def _save_eval(rows, src, suffix='_eval'):
-    from .data import write_jsonl
+    from .core.data import write_jsonl
     stem = src.stem.removesuffix('_eval')
     out = src if not suffix else src.with_name(stem + suffix + src.suffix)
     write_jsonl(rows, out)
@@ -154,7 +155,7 @@ def _save_eval(rows, src, suffix='_eval'):
 
 # ----------------------------------------------------------------- so sánh LLM
 def cmd_probe(args, paths):
-    from .llms import LLM
+    from .rag.llms import LLM
     LLM(args.llm, load_4bit=args.llm_4bit, verbose=True).probe(args.question)
 
 
@@ -172,8 +173,8 @@ def cmd_llms(args, paths):
 
 
 def cmd_contexts(args, paths):
-    from .compare import build_contexts, contexts_path
-    from .data import read_jsonl, write_jsonl
+    from .core.data import read_jsonl, write_jsonl
+    from .evaluation.compare import build_contexts, contexts_path
 
     rag = build_pipeline(paths, args)
     rows = build_contexts(rag, read_jsonl(paths.questions_dir / args.name))
@@ -182,8 +183,8 @@ def cmd_contexts(args, paths):
 
 
 def cmd_answer(args, paths):
-    from .compare import build_contexts, contexts_path, run_llm, save_answers
-    from .data import read_jsonl, write_jsonl
+    from .core.data import read_jsonl, write_jsonl
+    from .evaluation.compare import build_contexts, contexts_path, run_llm, save_answers
 
     qdir = paths.questions_dir
     if not contexts_path(qdir).exists():
@@ -200,8 +201,8 @@ def cmd_answer(args, paths):
 
 
 def cmd_report(args, paths):
-    from .compare import contexts_path, load_results, write_report
-    from .data import read_jsonl
+    from .core.data import read_jsonl
+    from .evaluation.compare import contexts_path, load_results, write_report
 
     keys = _keys(args.llms) if args.llms else None
     write_report(paths.questions_dir, read_jsonl(contexts_path(paths.questions_dir)),
@@ -210,19 +211,19 @@ def cmd_report(args, paths):
 
 def cmd_compare(args, paths):
     """contexts (nếu chưa có / --refresh) -> answer cho từng LLM chạy được trong môi trường này -> report."""
-    from .compare import (
+    from .core.data import read_jsonl, write_jsonl
+    from .evaluation.compare import (
         contexts_path,
         load_results,
         run_llm,
         save_answers,
         write_report,
     )
-    from .data import read_jsonl, write_jsonl
-    from .llms import check_transformers, get_spec
+    from .rag.llms import check_transformers, get_spec
 
     qdir = paths.questions_dir
     if args.refresh or not contexts_path(qdir).exists():
-        from .compare import build_contexts
+        from .evaluation.compare import build_contexts
         rag = build_pipeline(paths, args)
         write_jsonl(build_contexts(rag, read_jsonl(qdir / args.name)), contexts_path(qdir))
         print(f'  -> {contexts_path(qdir)}')
@@ -245,6 +246,15 @@ def cmd_compare(args, paths):
         print(f'\n! Bỏ qua {key}: {why}')
     print()
     write_report(qdir, ctx, load_results(qdir, _keys(args.llms)))
+
+
+def cmd_judge(args, paths):
+    from .evaluation.judge import run_judge
+
+    qdir = paths.questions_dir
+    keys = [k.strip() for k in args.answers.split(',') if k.strip()] or \
+        sorted(p.stem.removeprefix('answers_') for p in qdir.glob('answers_*.jsonl'))
+    run_judge(qdir, args.judge, keys, load_4bit=args.llm_4bit, n_controls=args.controls, verbose=args.verbose)
 
 
 def _keys(s):
@@ -338,7 +348,7 @@ def main(argv=None):
     p.set_defaults(func=cmd_contexts)
 
     p = sub.add_parser('answer', help='1 LLM trả lời trên contexts.jsonl -> answers_<llm>.jsonl')
-    p.add_argument('--name', default='questions.jsonl', help='file câu hỏi trong OUTPUT_QUESTIONS/ (mặc định questions.jsonl)')
+    p.add_argument('--name', default='questions.jsonl', help='file câu hỏi trong OUTPUT_QUESTIONS/')
     llm_opts(p)
     p.set_defaults(func=cmd_answer)
 
@@ -352,6 +362,14 @@ def main(argv=None):
     p.add_argument('--refresh', action='store_true', help='truy xuất lại dù đã có contexts.jsonl')
     llm_opts(p)
     p.set_defaults(func=cmd_compare)
+
+    p = sub.add_parser('judge', help='LLM-as-a-judge: faithfulness + relevancy cho answers_*.jsonl')
+    p.add_argument('--judge', default='qwen2.5-3b', choices=list(LLMS), help='LLM làm giám khảo')
+    p.add_argument('--answers', default='', help='vd. "qwen2.5-3b,vi-qwen2-3b-rag_temp05"; mặc định: mọi file')
+    p.add_argument('--controls', type=int, default=30, help='số cặp câu kiểm soát positive/negative')
+    p.add_argument('--llm-4bit', action=argparse.BooleanOptionalAction, default=C.LLM_4BIT)
+    p.add_argument('--verbose', action='store_true')
+    p.set_defaults(func=cmd_judge)
 
     args = ap.parse_args(argv)
     paths = C.Paths(Path(args.load_dir), Path(args.index_dir), Path(args.questions_dir))

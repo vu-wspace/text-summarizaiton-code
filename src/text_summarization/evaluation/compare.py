@@ -10,11 +10,13 @@ Tách 3 bước vì: (a) công bằng — mọi LLM nhận ngữ cảnh giống 
 import csv
 import json
 import platform
+import re
 import time
 from pathlib import Path
 
-from .data import read_jsonl, write_jsonl
-from .llms import LLM, LLMS, get_spec
+from ..core.data import read_jsonl, write_jsonl
+from ..core.text import contains_answer
+from ..rag.llms import LLM, LLMS, get_spec
 from .metrics import METRICS, aggregate, bootstrap_ci, holm, mcnemar, score
 
 
@@ -36,6 +38,14 @@ def build_contexts(pipeline, questions):
                      'hit@1': bool(used) and used[0] == str(r['guid']), 'hit@3': str(r['guid']) in used[:3]})
         print(f"  [{r['id']}] hit@1={int(rows[-1]['hit@1'])} hit@3={int(rows[-1]['hit@3'])}  {q}")
     return rows
+
+
+def answer_hits(context, gold):
+    """-> (ans@1, ans@3): đáp án chuẩn có trong bài đầu / trong cả ngữ cảnh. hit@k so guid bài nguồn nên tính
+    trượt khi bài khác cùng sự kiện (VietNews có nhiều bài trùng chủ đề) vẫn chứa đáp án; ans@k đo đúng điều LLM
+    cần: ngữ cảnh có đáp án hay không."""
+    parts = re.split(r'\n\n(?=\[\d+\] )', context or '')
+    return contains_answer(parts[0], gold), contains_answer(context or '', gold)
 
 
 # ----------------------------------------------------------------- 2. sinh câu trả lời
@@ -145,10 +155,13 @@ def write_report(qdir, contexts, results):
     n = len(contexts)
     h1 = sum(c['hit@1'] for c in contexts) / max(n, 1)
     h3 = sum(c['hit@3'] for c in contexts) / max(n, 1)
+    ans = [answer_hits(c['context'], c['answer']) for c in contexts]
+    a1, a3 = (sum(x[i] for x in ans) / max(n, 1) for i in (0, 1))
 
     md = [f'# So sánh LLM trên {n} câu hỏi', '',
           (
-              f'Truy xuất (chung cho mọi LLM): **hit@1 = {h1:.2f}**, **hit@3 = {h3:.2f}**. '
+              f'Truy xuất (chung cho mọi LLM): **hit@1 = {h1:.2f}**, **hit@3 = {h3:.2f}** (đúng bài nguồn); '
+              f'**ans@1 = {a1:.2f}**, **ans@3 = {a3:.2f}** (ngữ cảnh chứa đáp án chuẩn). '
               'Mọi LLM nhận cùng một ngữ cảnh, nên khác biệt bên dưới chỉ do LLM.'
           ), '', table, '',
           '- **contains**: đáp án chuẩn nằm trọn trong câu trả lời (chỉ số chính).',
@@ -164,7 +177,8 @@ def write_report(qdir, contexts, results):
            '|---|---|---|---|---|---|---|']
     # GGUF (llama-server) đã lượng tử hoá sẵn -> không tính là "khác chế độ"
     if len({bool(m.get('4bit')) for _, m in results.values() if m.get('dtype') != 'gguf'}) > 1:
-        md.insert(md.index('## Cấu hình'), '> ⚠ Các LLM chạy khác chế độ (bf16 và 4-bit): chênh lệch có thể do lượng tử hoá.\n')
+        md.insert(md.index('## Cấu hình'),
+                  '> ⚠ Các LLM chạy khác chế độ (bf16 và 4-bit): chênh lệch có thể do lượng tử hoá.\n')
     for key, (_, meta) in results.items():
         quant = 'GGUF' if meta.get('dtype') == 'gguf' else ('có' if meta.get('4bit') else 'không')
         md.append(f"| {key} | {meta.get('repo', get_spec(key).repo)} | {meta.get('prompt', '')} | "

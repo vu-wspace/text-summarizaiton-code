@@ -13,7 +13,7 @@ import urllib.request
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-from .config import DEFAULT_LLM
+from ..core.config import DEFAULT_LLM
 
 NO_ANSWER = 'Tôi không biết dựa trên các tài liệu được cung cấp.'
 
@@ -49,7 +49,15 @@ CHATML = ("{% for m in messages %}<|im_start|>{{ m['role'] }}\n{{ m['content'] }
 PLAIN = ("{% for m in messages %}{{ m['content'] }}\n\n{% endfor %}"
          "{% if add_generation_prompt %}Trả lời:{% endif %}")
 
-PROMPTS = {'ours': (QA_SYSTEM, QA_USER), 'vi-rag': (VIRAG_SYSTEM, VIRAG_USER)}
+# Cùng khuôn AITeamVN, thêm yêu cầu ngắn gọn: prompt gốc cho câu trả lời TB 55 từ ("Theo ngữ cảnh, ... Cụ thể, ...")
+# trong khi đáp án chuẩn chỉ vài từ -> F1 0,16, EM 0.
+VIRAG_CONCISE_USER = VIRAG_USER.replace(
+    '- Chỉ cần từ chối',
+    '- Trả lời bằng MỘT câu ngắn, đi thẳng vào điều được hỏi; không mở đầu bằng "Theo ngữ cảnh", '
+    'không giải thích thêm, không trích dẫn lại ngữ cảnh.\n'
+    '- Chỉ cần từ chối')
+PROMPTS = {'ours': (QA_SYSTEM, QA_USER), 'vi-rag': (VIRAG_SYSTEM, VIRAG_USER),
+           'vi-rag-concise': (VIRAG_SYSTEM, VIRAG_CONCISE_USER)}
 
 
 @dataclass(frozen=True)
@@ -69,8 +77,10 @@ class LLMSpec:
 LLMS = {s.key: s for s in [
     LLMSpec('qwen2.5-3b', 'Qwen/Qwen2.5-3B-Instruct',
             note='Mô hình gốc của dự án, đa ngôn ngữ, không fine-tune riêng cho RAG'),
-    LLMSpec('vi-qwen2-3b-rag', 'AITeamVN/Vi-Qwen2-3B-RAG', prompt='vi-rag',
-            note='Qwen2 3B fine-tune cho RAG tiếng Việt (AITeamVN), dùng prompt gốc của nhóm'),
+    # vi-rag-concise thay vi-rag: dev / held-out số từ 59,6->42,9 / 66,1->53,8, F1 0,162->0,198 / 0,141->0,167,
+    # contains 0,69->0,68 / 0,60->0,58 (McNemar p=1,0 / 0,75: không khác biệt có ý nghĩa)
+    LLMSpec('vi-qwen2-3b-rag', 'AITeamVN/Vi-Qwen2-3B-RAG', prompt='vi-rag-concise',
+            note='Qwen2 3B fine-tune cho RAG tiếng Việt (AITeamVN), khuôn prompt của nhóm + yêu cầu trả lời ngắn'),
     LLMSpec('qwen3.5-2b-vie', 'alphaedge-ai/Qwen3.5-2B-vie-32768', loader='image-text', min_transformers='5.2',
             service='llm5',
             note='Qwen3.5-2B rút gọn từ vựng còn tiếng Việt (1,77B tham số); cần transformers ≥ 5.2'),

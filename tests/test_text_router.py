@@ -1,4 +1,10 @@
-from text_summarization.router import (
+from text_summarization.core.text import (
+    clean_input,
+    contains_answer,
+    norm_answer,
+    normalize_text,
+)
+from text_summarization.rag.router import (
     LIST,
     QA,
     SUMMARIZE_TEXT,
@@ -6,12 +12,6 @@ from text_summarization.router import (
     route,
     strip_type_words,
     wanted_types,
-)
-from text_summarization.text import (
-    clean_input,
-    contains_answer,
-    norm_answer,
-    normalize_text,
 )
 
 

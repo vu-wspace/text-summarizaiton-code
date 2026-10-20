@@ -29,31 +29,30 @@ Dựa trên kết quả thực nghiệm benchmark độc lập trên **100 câu 
 
 ---
 
-### 📈 Đánh giá Faithfulness & Relevancy (100 câu hỏi, evaluator: `qwen2.5-3b`)
+### 📈 Đánh giá Faithfulness & Relevancy (LLM-as-a-judge, 100 câu hỏi)
 
-Métrics này đo lường:
-- **Faithfulness**: Câu trả lời có trung thực với ngữ cảnh truy xuất không? (0-1, càng cao càng tốt)
-- **Relevancy**: Câu trả lời có liên quan đến câu hỏi không? (0-1, càng cao càng tốt)
+Lệnh: `uv run vietnews --questions-dir OUTPUT_QUESTIONS/compare100 judge --judge vi-qwen2-3b-rag`
 
-#### 🔧 Cấu hình greedy (mặc định, max_new_tokens=256)
+- **Faithfulness**: mọi thông tin trong câu trả lời có nằm trong ngữ cảnh truy xuất không (0 / 0.5 / 1). Trả lời ngắn / thiếu ý KHÔNG bị trừ điểm.
+- **Relevancy**: câu trả lời có đúng trọng tâm câu hỏi không (không nhìn đáp án chuẩn; độ đúng đã đo bằng contains / recall).
 
-| Model | Faithfulness | Relevancy | File kết quả |
-|---|:---:|:---:|---|
-| `vi-qwen2-3b-rag` | **0.000** | **0.200** | `OUTPUT_QUESTIONS/compare100/answers_vi-qwen2-3b-rag_fr.jsonl` |
-| `qwen2.5-3b` | **0.000** | **0.135** | `OUTPUT_QUESTIONS/compare100/answers_qwen2.5-3b_fr.jsonl` |
-| `qwen3.5-2b-vie` | **0.000** | **0.075** | `OUTPUT_QUESTIONS/compare100/answers_qwen3.5-2b-vie_fr.jsonl` |
+**Kiểm soát judge trước khi tin con số**: 30 câu positive (đáp án chuẩn, có trong ngữ cảnh) + 30 câu negative (đáp án của câu hỏi khác).
 
-#### 🔧 Cấu hình sampling (temperature=0.5, max_new_tokens=512, do_sample=True)
+| Judge | Faithfulness: TB positive ↑ | TB negative ↓ | Độ chính xác | Relevancy: độ chính xác |
+|---|:---:|:---:|:---:|:---:|
+| `vi-qwen2-3b-rag` | **0.98** | **0.00** | **1.00** | 0.68 |
+| `qwen2.5-3b` | 0.63 | 0.00 | 0.93 | 0.58 |
 
-| Model | Faithfulness | Relevancy | File kết quả |
-|---|:---:|:---:|---|
-| `vi-qwen2-3b-rag` | **0.000** | **0.200** | `OUTPUT_QUESTIONS/compare100/answers_vi-qwen2-3b-rag_temp05_fr.jsonl` |
-| `qwen2.5-3b` | **0.000** | **0.125** | `OUTPUT_QUESTIONS/compare100/answers_qwen2.5-3b_temp05_fr.jsonl` |
-| `qwen3.5-2b-vie` | — | — | *chưa đánh giá (cần transformers ≥ 5.2)* |
+| Model | Faithfulness (judge vi-qwen2) | Faithfulness (judge qwen2.5) | Relevancy (judge vi-qwen2) |
+|---|:---:|:---:|:---:|
+| `vi-qwen2-3b-rag` (prompt gốc) | **0.980** | **0.805** | **0.865** |
+| `vi-qwen2-3b-rag` (prompt ngắn, mặc định mới) | 0.975 | 0.755 | 0.860 |
+| `qwen2.5-3b` | 0.950 | 0.655 | 0.785 |
+| `qwen3.5-2b-vie` | 0.945 | 0.630 | 0.685 |
 
-> 📌 *Lưu ý:* Faithfulness = 0.000 cho cả 3 model do evaluator (`qwen2.5-3b`) chấm rất khắt khe — câu trả lời thường được đánh giá là không fully grounded trong ngữ cảnh. Relevancy cho thấy `vi-qwen2-3b-rag` sinh câu trả lời liên quan câu hỏi nhất (0.200).
+> 📌 Parse lỗi: 0 % ở mọi lần chạy. Hai judge cho **cùng thứ hạng**, kể cả khi `qwen2.5-3b` tự chấm chính nó (thiên vị tự chấm không giải thích được kết quả). Judge `qwen2.5-3b` khắt khe hơn (chỉ cho 0.63 với câu positive) nên giá trị tuyệt đối của nó thấp hơn; dùng `vi-qwen2-3b-rag` làm số chính. **Relevancy độ tin cậy thấp** (độ chính xác kiểm soát 0.58–0.68) — chỉ nên xem như tham khảo.
 >
-> 📌 *Nhận xét về temperature=0.5:* Với `temperature=0.5, max_new_tokens=512`, cả 2 model đều cho câu trả lời ngắn gọn hơn, sát gold answer hơn, nhưng faithfulness vẫn = 0 do evaluator khắt khe. `vi-qwen2-3b-rag` duy trì relevancy 0.200; `qwen2.5-3b` giảm nhẹ xuống 0.125.
+> ⚠ *Kết quả cũ (faithfulness = 0.000 cho mọi model) là lỗi đo, không phải do model*: khuôn mẫu `{"score": 0.0, "reason": "..."}` trong prompt khiến judge 3B chép nguyên điểm 0.0 (57–84 % lý do bắt đầu bằng chuỗi `...`), parse lỗi (8–20 %) bị tính 0 điểm, và rubric phạt câu trả lời *thiếu* thông tin như câu *bịa*. Đã sửa trong `src/text_summarization/evaluation/judge.py`.
 
 ---
 
@@ -102,7 +101,7 @@ Métrics này đo lường:
 # Cài đặt toàn bộ thư viện cần thiết
 uv sync
 
-# Tải, chuẩn hóa và loại trùng dữ liệu VietNews -> OUTPUT_LOAD/
+# Tải tập test VietNews, loại trùng, chuẩn hoá -> OUTPUT_LOAD/data_article.json
 uv run vietnews load
 
 # Dựng kho: NER + Chunking + Embedding + Qdrant -> OUTPUT_INDEX/
@@ -175,6 +174,10 @@ Thực nghiệm trên 100 câu hỏi (hit@k tính theo bài viết gốc trong t
 
 *Nhận xét:* BM25 vượt trội dense đối với tin tức tiếng Việt do chứa nhiều tên người, địa danh, số liệu cụ thể. Kết hợp Hybrid + Re-ranker mang lại MRR cao nhất (0.909).
 
+**Thử tối ưu truy xuất (dev = 100 câu ở trên, held-out = 110 câu mới, seed 2026, không trùng bài):** 23 cấu hình (độ sâu re-rank k = 5–50, RRF có trọng số, thêm tiêu đề bài khi re-rank, gộp điểm re-ranker + retriever). Không cấu hình nào hơn cấu hình hiện tại có ý nghĩa thống kê; cấu hình tốt nhất trên dev (hit@1 0.88) tụt còn 0.83 trên held-out (quá khớp). Cấu hình hiện tại ổn định: hit@1 **0.87 / 0.87**. Re-ranker là thành phần đóng góp rõ nhất (bỏ re-ranker: held-out hit@1 0.87 → 0.74, p = 0.001). → **Giữ nguyên cấu hình.**
+
+Phần lớn các câu "trượt" hit@1 không phải lỗi truy xuất: VietNews có nhiều bài cùng sự kiện, bài top-1 khác bài nguồn nhưng **vẫn chứa đáp án** (6/13 câu trượt ở dev), số còn lại chủ yếu là câu hỏi mơ hồ do LLM sinh (vd. *"Khi nào ông Trump sa thải ông Comey?"* → *"Bốn tháng sau đó"*). Tỉ lệ bài top-1 chứa đáp án chuẩn là **0.93 / 0.94** (dev / held-out). `compare_report.md` nay báo thêm **ans@1 / ans@3** (ngữ cảnh chứa đáp án chuẩn) bên cạnh hit@k.
+
 ### 2. So sánh Top-3 LLM đầu-cuối (End-to-End Generation)
 Kiểm thử trên 100 câu hỏi với **cùng một ngữ cảnh truy xuất**:
 
@@ -193,6 +196,17 @@ Kiểm thử trên 100 câu hỏi với **cùng một ngữ cảnh truy xuất**
 - **`qwen2.5-3b`** phản hồi ngắn gọn, tập trung thẳng vào trọng tâm câu hỏi, tiết kiệm 50% thời gian suy luận.
 - **`qwen3.5-2b-vie`** cực kỳ tiết kiệm tài nguyên (1.5 GB VRAM), nhanh nhất, phù hợp triển khai edge hoặc server cấu hình thấp.
 
+**Prompt ngắn cho `vi-qwen2-3b-rag` (mặc định mới, `prompt='vi-rag-concise'`):** giữ nguyên khuôn prompt AITeamVN, chỉ thêm yêu cầu *"Trả lời bằng MỘT câu ngắn…"*. Cùng ngữ cảnh, chạy lại cả hai prompt trong cùng điều kiện:
+
+| Tập | Prompt | Contains | Recall | F1 | Số từ TB | Giây/câu |
+|---|---|:---:|:---:|:---:|:---:|:---:|
+| dev (100) | gốc `vi-rag` | 0.69 | 0.81 | 0.162 | 59.6 | — |
+| dev (100) | ngắn `vi-rag-concise` | 0.68 | 0.81 | **0.198** | **42.9** | — |
+| held-out (110) | gốc `vi-rag` | 0.60 | 0.75 | 0.141 | 66.1 | 13.0 |
+| held-out (110) | ngắn `vi-rag-concise` | 0.58 | 0.74 | **0.167** | **53.8** | **10.8** |
+
+Contains không khác biệt có ý nghĩa (McNemar p = 1.0 / 0.75), faithfulness giữ nguyên. Cải thiện có thật nhưng **khiêm tốn**: mô hình đã fine-tune vẫn hay mở đầu "Theo ngữ cảnh…" và thêm "Cụ thể…". Cắt hậu xử lý phần "Cụ thể…" tăng F1 lên 0.23 nhưng làm mất 1–5 câu trả lời đúng nên **không** áp dụng. EM ≈ 0 là do cấu trúc: mô hình trả lời bằng câu hoàn chỉnh còn đáp án chuẩn là cụm từ ngắn.
+
 ---
 
 ## 🛠 Danh mục lệnh CLI (`vietnews <lệnh>`)
@@ -209,6 +223,7 @@ Kiểm thử trên 100 câu hỏi với **cùng một ngữ cảnh truy xuất**
 | `answer` | Cho một LLM cụ thể trả lời trên contexts | `--llm <key>` |
 | `report` | Tổng hợp bảng so sánh, vẽ chỉ số và báo cáo | `--llms vi-qwen2-3b-rag,qwen2.5-3b` |
 | `compare` | Chạy trọn vẹn quy trình benchmark LLM | `--refresh` |
+| `judge` | LLM-as-a-judge: faithfulness + relevancy, kèm câu kiểm soát | `--judge vi-qwen2-3b-rag`, `--answers <keys>` |
 
 ---
 
@@ -217,19 +232,32 @@ Kiểm thử trên 100 câu hỏi với **cùng một ngữ cảnh truy xuất**
 ```
 text_summarization/
 ├── src/text_summarization/
-│   ├── cli.py             # Entrypoint chính cho các câu lệnh vietnews
-│   ├── config.py          # Tập trung toàn bộ hằng số, đường dẫn, siêu tham số
-│   ├── data.py            # Xử lý tải và làm sạch dữ liệu VietNews
-│   ├── indexing.py        # Semantic Chunking và luồng nạp Index
-│   ├── llms.py            # Đặc tả Top LLM, template prompt, quản lý VRAM
-│   ├── metrics.py         # Đo đạc chỉ số: contains, recall, F1, McNemar
-│   ├── models.py          # Quản lý vòng đời nạp lười mô hình PyTorch
-│   ├── ner.py             # Trích xuất thực thể tên riêng (ELECTRA)
-│   ├── pipeline.py        # Luồng RAG hoàn chỉnh (Retrieve -> Rerank -> QA/Sum)
-│   ├── router.py          # Phân loại intent câu hỏi
-│   ├── sparse.py          # Tokenizer & Vectorizer BM25 âm tiết
-│   └── store.py           # Kết nối và truy vấn Qdrant
-├── tests/                 # 57 bài test đơn vị (unit tests)
+│   ├── cli.py                 # Entrypoint chính cho các câu lệnh vietnews
+│   ├── core/                  # Nền tảng dùng chung
+│   │   ├── config.py          # Tập trung toàn bộ hằng số, đường dẫn, siêu tham số
+│   │   ├── data.py            # Tải, làm sạch, đọc/ghi dữ liệu VietNews
+│   │   └── text.py            # Chuẩn hoá văn bản, so khớp đáp án
+│   ├── rag/                   # Hệ thống RAG
+│   │   ├── indexing.py        # Semantic Chunking và luồng nạp Index
+│   │   ├── ner.py             # Trích xuất thực thể tên riêng (ELECTRA)
+│   │   ├── store.py           # Kết nối và truy vấn Qdrant
+│   │   ├── sparse.py          # Tokenizer & Vectorizer BM25 âm tiết
+│   │   ├── models.py          # Nạp lười embedding, re-ranker, ViT5, LLM
+│   │   ├── llms.py            # Đặc tả LLM, template prompt, quản lý VRAM
+│   │   ├── router.py          # Phân loại intent câu hỏi
+│   │   └── pipeline.py        # Luồng RAG hoàn chỉnh (Retrieve -> Rerank -> QA/Sum)
+│   └── evaluation/            # Đánh giá
+│       ├── questions.py       # Sinh câu hỏi, chấm truy xuất (hit@k, MRR)
+│       ├── compare.py         # So sánh LLM trên cùng ngữ cảnh (contexts -> answer -> report)
+│       ├── metrics.py         # Chỉ số: contains, recall, F1, McNemar
+│       └── judge.py           # LLM-as-a-judge: faithfulness / relevancy + câu kiểm soát
+├── tests/                 # 68 bài test đơn vị (unit tests)
+├── OUTPUT_LOAD/           # data_article.json: kho 22.492 bài (sinh bởi `vietnews load`)
+├── OUTPUT_INDEX/          # entities.json + vectors/{chunks.pkl, embedds.npy} (sinh bởi `vietnews index`)
+├── OUTPUT_QUESTIONS/      # kết quả đánh giá
+│   ├── compare100/        # benchmark chính: 100 câu, câu trả lời 6 LLM, judge_<llm>/report.md
+│   ├── heldout100/        # 110 câu held-out (seed 2026) để kiểm chứng, không dùng để tinh chỉnh
+│   └── archive/           # các lần chạy cũ (set1–10, 10 câu đầu tiên...)
 ├── Dockerfile             # Image chạy pipeline RAG với PyTorch CUDA 12.8
 ├── Dockerfile.llm5        # Image phụ chạy các dòng mô hình transformers 5.x
 ├── docker-compose.yml     # Khởi động cụm dịch vụ RAG & Qdrant
@@ -245,4 +273,4 @@ Chạy bộ test tự động (không yêu cầu GPU):
 ```bash
 uv run --group dev pytest
 ```
-*Kết quả:* Toàn bộ 57/57 unit tests đều pass trong ~1.5 giây.
+*Kết quả:* Toàn bộ 68/68 unit tests đều pass trong ~1.5 giây.

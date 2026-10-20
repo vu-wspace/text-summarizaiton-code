@@ -68,8 +68,8 @@ class Paths:
         return self.index_dir / 'entities.json'
 
     @property
-    def vector_dir(self):          # tên cũ giữ nguyên để dùng lại chunks.pkl / embedds.npy đã có
-        return self.index_dir / 'faiss_index'
+    def vector_dir(self):          # chunks.pkl + embedds.npy (nguồn để nạp lại Qdrant)
+        return self.index_dir / 'vectors'
 
     @property
     def chunks(self):

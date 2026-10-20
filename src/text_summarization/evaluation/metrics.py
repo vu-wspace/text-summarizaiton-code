@@ -13,8 +13,8 @@ from math import comb
 
 import numpy as np
 
-from .llms import ABSTAIN_RE
-from .text import contains_answer, norm_answer
+from ..core.text import contains_answer, norm_answer
+from ..rag.llms import ABSTAIN_RE
 
 
 def _tokens(s):

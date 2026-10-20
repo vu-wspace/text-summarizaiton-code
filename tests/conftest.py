@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
-from text_summarization.store import Hit
+from text_summarization.rag.store import Hit
 
 
 class FakeModels:
@@ -18,8 +18,7 @@ class FakeModels:
         self.calls = []
 
     def embed_query(self, text):
-        v = np.array([1.0 if w in text else 0.0 for w in self.vocab] + [1e-3], dtype='float32')
-        return v
+        return np.array([1.0 if w in text else 0.0 for w in self.vocab] + [1e-3], dtype='float32')
 
     def rerank(self, query, texts):
         return [sum(w in t for w in query.split()) for t in texts]
@@ -34,7 +33,7 @@ class FakeModels:
         return ' '.join(text.split()[:max_tokens])
 
     def answer(self, question, context, max_new_tokens=256):
-        from text_summarization.llms import QA_SYSTEM, QA_USER
+        from text_summarization.rag.llms import QA_SYSTEM, QA_USER
         return self.chat(QA_SYSTEM, QA_USER.format(context=context, question=question))
 
     def chat(self, system, user, max_new_tokens=256, repetition_penalty=1.05):

@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from . import config as C
+from ..core import config as C
+from ..core.text import normalize_query, normalize_text
 from . import router as R
 from .llms import NO_ANSWER
-from .text import normalize_query, normalize_text
 
 NOT_FOUND = 'Không tìm thấy bài báo phù hợp.'
 

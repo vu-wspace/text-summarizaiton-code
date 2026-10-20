@@ -7,11 +7,8 @@ from pathlib import Path
 from .text import INVISIBLE, LOWER_CLS, normalize_text
 
 HF = 'hf://datasets/nam194/vietnews/'   # đổi thành thư mục local nếu đã tải sẵn parquet
-SPLITS = {
-    'train': 'data/train-00000-of-00001-84acb79f6c6547a5.parquet',
-    'validation': 'data/validation-00000-of-00001-210cc51bf3cdb90f.parquet',
-    'test': 'data/test-00000-of-00001-123f98d55067eb7b.parquet',
-}
+# Kho bài cho RAG = tập test (22.492 bài sau lọc trùng); train / validation không dùng ở đâu nên không tải.
+TEST_PARQUET = 'data/test-00000-of-00001-123f98d55067eb7b.parquet'
 
 
 # ----------------------------------------------------------------- đọc / ghi
@@ -52,16 +49,16 @@ def load_articles(path):
 
 
 # ----------------------------------------------------------------- tải + làm sạch VietNews
-def load_split(name, source=HF):
+def load_test(source=HF):
     import pandas as pd
 
     prefix = source if source.startswith('hf://') else str(Path(source)) + '/'
-    df = pd.read_parquet(prefix + SPLITS[name])
+    df = pd.read_parquet(prefix + TEST_PARQUET)
     n0 = len(df)
     df = df[~df['title'].duplicated()]
     df = df[~df['abstract'].duplicated()]
     df = df.dropna()
-    print(f'{name:10s}: {n0} -> {len(df)} bài (loại trùng title/abstract, bỏ NaN)')
+    print(f'test: {n0} -> {len(df)} bài (loại trùng title/abstract, bỏ NaN)')
     return df
 
 
@@ -83,7 +80,10 @@ def df_to_json(df, path):
 def check_normalize(df, n=2000, seed=0):
     """Đếm các mẫu lẽ ra phải hết sau chuẩn hoá (dùng `re` của Python, tránh RE2 của pandas 3)."""
     out = df['article'].sample(min(n, len(df)), random_state=seed).apply(normalize_text)
-    count = lambda pat: int(out.apply(lambda t: len(re.findall(pat, t))).sum())
+
+    def count(pat):
+        return int(out.apply(lambda t: len(re.findall(pat, t))).sum())
+
     print("Còn ' . ' + chữ thường:", count(rf' \. {LOWER_CLS}'))
     print('Còn ký tự vô hình    :', count(INVISIBLE))
     print("Còn '_'              :", count('_'))
@@ -91,12 +91,8 @@ def check_normalize(df, n=2000, seed=0):
 
 
 def run_load(paths, check=False, source=HF):
-    df_test = load_split('test', source)
+    df = load_test(source)
     if check:
-        check_normalize(df_test)
+        check_normalize(df)
         return
-    out = paths.load_dir
-    df_to_json(load_split('train', source), out / 'data_train.json')
-    df_to_json(load_split('validation', source), out / 'data_val.json')
-    df_to_json(df_test, out / 'data_test.json')
-    df_to_json(normalize_df(df_test), paths.article)
+    df_to_json(normalize_df(df), paths.article)

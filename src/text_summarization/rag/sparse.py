@@ -6,6 +6,7 @@ bigram giữ được từ ghép / tên riêng mà unigram làm loãng. Mỗi te
 Phần TF (bão hoà k1, chuẩn hoá độ dài b) tính ở đây cho chunk; phần IDF do Qdrant tính trên toàn kho
 (Modifier.IDF), nên thêm chunk mới không phải tính lại vector cũ. Câu hỏi: mỗi term trọng số 1.
 """
+import itertools
 import re
 import unicodedata
 import zlib
@@ -14,9 +15,6 @@ from collections import Counter
 K1 = 1.2
 B = 0.75
 WORD = re.compile(r'\w+')
-
-
-import itertools
 
 
 def terms(text):
