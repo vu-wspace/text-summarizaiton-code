@@ -258,14 +258,14 @@ uv run vietnews chat
 Ví dụ một phiên chat:
 
 ```
-Kho: 22492 bài, ... chunk | tìm: hybrid | LLM: vi-qwen2-3b-rag | device=cuda
+Kho: 22492 bài, 132850 chunk | tìm: hybrid | LLM: vi-qwen2-3b-rag | device=cuda
 Sẵn sàng. Gõ "exit" để thoát.
 
 Bạn: Liệt kê người trong vụ Hồ Xuân Huy lừa đảo
 
-[list] Trả lời: Bài: <tiêu đề bài>
-  Người: Hồ Xuân Huy, ...
-  - [<guid>] <tiêu đề bài>
+[list] Trả lời: Bài: Bản án cho đối tượng giả danh công an để lừa đảo
+  Người: Hồ Xuân Huy, Lê Quốc Th, Nguyễn Tấn T, Trần Nhật S, Đinh Ngọc H, Bảo Th
+  - [1] Bản án cho đối tượng giả danh công an để lừa đảo
 ```
 
 ---
