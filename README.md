@@ -66,39 +66,47 @@ docker compose run --rm rag          # chat
 
 ## 🏗 Kiến trúc pipeline
 
-```
-                              Câu truy vấn
-                                   │
-                   Router (regex): qa / list / summarize
-        ┌──────────────────────────┼─────────────────────────┐
-        ▼                          ▼                         ▼
-   [Hỏi đáp RAG]              [Liệt kê thực thể]         [Tóm tắt]
-        │                          │                         │
- Qdrant Hybrid Search        Bài viết top-1            Bài viết top-1  ◄── (hoặc văn bản dán vào)
- (Dense PhoBERT + BM25,            │                         │
-  mỗi nhánh 20 → RRF)      Đọc entities.json          Chuẩn hóa văn bản
-        │                  (NER tính sẵn lúc index)          │
-   Top-5 chunks                                              ▼
-        │                                              ViT5 Summarizer
- Vietnamese_Reranker                                  (beam 4, ≤ 256 token)
-        │
- Small-to-big: 3 bài khác nhau
- (ghép nguyên văn, ≤ 3.000 token)
-        │
-        ▼
-   LLM tiếng Việt (vi-qwen2-3b-rag 4-bit, greedy)
+Luồng **truy vấn** (lệnh `chat` / `ask`):
+
+```mermaid
+flowchart TD
+    Q["Câu nhập"] --> R{"Router (regex đầu câu)"}
+
+    R -->|"Tóm tắt: văn bản ≥ 300 ký tự<br/>summarize_text"| SUM
+    R -->|"qa · list · summarize_topic"| N["Chuẩn hoá câu hỏi<br/>normalize_text"]
+
+    N --> H["Qdrant hybrid search<br/>dense PhoBERT + BM25<br/>mỗi nhánh 20 chunk → RRF"]
+    H --> K["Top-5 chunk"]
+    K --> RR["Re-rank<br/>Vietnamese_Reranker"]
+
+    RR -->|qa| S2B["Small-to-big<br/>3 bài khác nhau"]
+    S2B --> CTX["Ghép nguyên văn [1] [2] [3]<br/>≤ 3.000 token"]
+    CTX --> LLM["LLM tiếng Việt<br/>vi-qwen2-3b-rag 4-bit, greedy"]
+    LLM --> A1["Câu trả lời + bài nguồn"]
+
+    RR -->|"list · summarize_topic"| TOP1["Bài top-1"]
+    TOP1 -->|list| ENT[("entities.json<br/>NER tính sẵn lúc index")]
+    ENT --> A2["Danh sách thực thể<br/>người · địa điểm · tổ chức · khác"]
+    TOP1 -->|summarize_topic| SUM["ViT5 summarizer<br/>beam 4, ≤ 256 token"]
+    SUM --> A3["Bản tóm tắt"]
 ```
 
-Luồng **dựng chỉ mục** (lệnh `index`, 4 bước chạy độc lập được):
+Luồng **dựng chỉ mục** (lệnh `index`, mỗi bước chạy riêng được bằng `--steps`):
 
-```
-data_article.json ──► ner   ──► entities.json            {guid: {PERSON: [...], LOCATION: [...], ...}}
-                  ──► chunk ──► vectors/chunks.pkl        (semantic chunking, ≤ 254 token)
-                  ──► embed ──► vectors/embedds.npy       (768 chiều, đã chuẩn hoá)
-                  ──► index ──► Qdrant collection "vietnews" (vector dense + vector thưa BM25)
+```mermaid
+flowchart LR
+    D[("data_article.json")] --> NER["ner<br/>ELECTRA, gộp bí danh"]
+    NER --> E[("entities.json<br/>{guid: {PERSON, LOCATION, ...}}")]
+
+    D --> C["chunk<br/>semantic chunking, ≤ 254 token"]
+    C --> CP[("vectors/chunks.pkl")]
+    CP --> EM["embed<br/>768 chiều, đã chuẩn hoá"]
+    EM --> NP[("vectors/embedds.npy")]
+    CP & NP --> IX["index<br/>dense + sparse BM25"]
+    IX --> QD[("Qdrant collection<br/>vietnews")]
 ```
 
-`chunks.pkl`, `embedds.npy` và collection Qdrant phải cùng một danh sách chunk theo cùng thứ tự (point id = vị trí chunk). Mỗi bước kiểm tra số lượng và báo lỗi nếu lệch.
+`ner` độc lập với ba bước còn lại. `chunks.pkl`, `embedds.npy` và collection Qdrant phải cùng một danh sách chunk theo cùng thứ tự (point id = vị trí chunk). Mỗi bước kiểm tra số lượng và báo lỗi nếu lệch.
 
 ### Các mô hình trong hệ thống
 
