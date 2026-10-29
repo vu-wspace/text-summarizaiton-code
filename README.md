@@ -6,26 +6,26 @@ Một câu lệnh `vietnews` lo toàn bộ vòng đời: tải dữ liệu → d
 
 ---
 
-## 📑 Mục lục
+## Mục lục
 
-1. [Ba chức năng chính](#-ba-chức-năng-chính)
-2. [Bắt đầu nhanh](#-bắt-đầu-nhanh)
-3. [Kiến trúc pipeline](#-kiến-trúc-pipeline)
-4. [Chi tiết từng thành phần](#-chi-tiết-từng-thành-phần)
-5. [Các LLM được hỗ trợ](#-các-llm-được-hỗ-trợ)
-6. [Cài đặt & chạy bằng uv](#-cài-đặt--chạy-bằng-uv)
-7. [Chạy bằng Docker](#-chạy-bằng-docker--docker-compose)
-8. [Cấu hình](#️-cấu-hình)
-9. [Danh mục lệnh CLI](#-danh-mục-lệnh-cli)
-10. [Quy trình đánh giá & benchmark](#-quy-trình-đánh-giá--benchmark)
-11. [Kết quả thực nghiệm](#-kết-quả-thực-nghiệm)
-12. [Cấu trúc thư mục & file sinh ra](#-cấu-trúc-thư-mục--file-sinh-ra)
-13. [Kiểm thử](#-kiểm-thử)
-14. [Xử lý sự cố](#-xử-lý-sự-cố)
+1. [Ba chức năng chính](#ba-chức-năng-chính)
+2. [Bắt đầu nhanh](#bắt-đầu-nhanh)
+3. [Kiến trúc pipeline](#kiến-trúc-pipeline)
+4. [Chi tiết từng thành phần](#chi-tiết-từng-thành-phần)
+5. [Các LLM được hỗ trợ](#các-llm-được-hỗ-trợ)
+6. [Cài đặt & chạy bằng uv](#cài-đặt--chạy-bằng-uv)
+7. [Chạy bằng Docker](#chạy-bằng-docker--docker-compose)
+8. [Cấu hình](#cấu-hình)
+9. [Danh mục lệnh CLI](#danh-mục-lệnh-cli)
+10. [Quy trình đánh giá & benchmark](#quy-trình-đánh-giá--benchmark)
+11. [Kết quả thực nghiệm](#kết-quả-thực-nghiệm)
+12. [Cấu trúc thư mục & file sinh ra](#cấu-trúc-thư-mục--file-sinh-ra)
+13. [Kiểm thử](#kiểm-thử)
+14. [Xử lý sự cố](#xử-lý-sự-cố)
 
 ---
 
-## 🎯 Ba chức năng chính
+## Ba chức năng chính
 
 Router phân loại câu nhập bằng regex ở **đầu câu** (không phân biệt hoa thường, chấp nhận tiền tố "Hãy"). Mọi câu không khớp đều là hỏi đáp.
 
@@ -42,7 +42,7 @@ Router phân loại câu nhập bằng regex ở **đầu câu** (không phân b
 
 ---
 
-## 🚀 Bắt đầu nhanh
+## Bắt đầu nhanh
 
 ```bash
 uv sync                      # cài môi trường (PyTorch CUDA 12.8)
@@ -64,7 +64,7 @@ docker compose run --rm rag          # chat
 
 ---
 
-## 🏗 Kiến trúc pipeline
+## Kiến trúc pipeline
 
 Luồng **truy vấn** (lệnh `chat` / `ask`):
 
@@ -117,13 +117,13 @@ flowchart LR
 | Re-ranker | `AITeamVN/Vietnamese_Reranker` | bge-reranker-v2-m3 fine-tune tiếng Việt, CrossEncoder, fp16 trên GPU (~1,1 GB) |
 | Tóm tắt | `VietAI/vit5-large-vietnews-summarization` | bf16 nếu GPU hỗ trợ, nếu không thì fp32 (T5 tràn số ở fp16) |
 | NER | `NlpHUST/ner-vietnamese-electra-base` | Chạy một lần lúc index |
-| LLM sinh câu trả lời | Mặc định `AITeamVN/Vi-Qwen2-3B-RAG` | 4-bit NF4 (`bitsandbytes`) mặc định; xem [danh sách LLM](#-các-llm-được-hỗ-trợ) |
+| LLM sinh câu trả lời | Mặc định `AITeamVN/Vi-Qwen2-3B-RAG` | 4-bit NF4 (`bitsandbytes`) mặc định; xem [danh sách LLM](#các-llm-được-hỗ-trợ) |
 
 Mọi mô hình đều **nạp lười**: chỉ nạp khi lần đầu cần dùng, nên hỏi đáp không chiếm VRAM của ViT5 và ngược lại.
 
 ---
 
-## 🔬 Chi tiết từng thành phần
+## Chi tiết từng thành phần
 
 ### 1. Tải & chuẩn hoá dữ liệu (`vietnews load`)
 
@@ -179,7 +179,7 @@ ViT5 nhận `"vietnews: " + văn bản`, cắt đầu vào ở 1.024 token, sinh
 
 ---
 
-## 🤖 Các LLM được hỗ trợ
+## Các LLM được hỗ trợ
 
 Xem danh sách trong môi trường hiện tại: `uv run vietnews llms`. Thêm mô hình mới = thêm một dòng `LLMSpec` vào `LLMS` trong `src/text_summarization/rag/llms.py`.
 
@@ -208,7 +208,7 @@ uv run vietnews probe --llm vinallama-2.7b-chat "Thủ đô của Việt Nam là
 
 ---
 
-## ⚡ Cài đặt & chạy bằng uv
+## Cài đặt & chạy bằng uv
 
 ### Yêu cầu
 
@@ -278,7 +278,7 @@ Bạn: Liệt kê người trong vụ Hồ Xuân Huy lừa đảo
 
 ---
 
-## 🐳 Chạy bằng Docker & Docker Compose
+## Chạy bằng Docker & Docker Compose
 
 `docker-compose.yml` gồm ba service:
 
@@ -313,11 +313,11 @@ tools\llama-cpp\llama-server -m models\Vistral-7B-ChatML.i1-Q4_K_M.gguf -ngl 99 
 docker compose run --rm rag chat --llm vistral-7b-chat
 ```
 
-**Qwen3.5-2B** (cần transformers 5.x) chỉ chạy được bước `answer`, xem [quy trình benchmark](#-quy-trình-đánh-giá--benchmark).
+**Qwen3.5-2B** (cần transformers 5.x) chỉ chạy được bước `answer`, xem [quy trình benchmark](#quy-trình-đánh-giá--benchmark).
 
 ---
 
-## ⚙️ Cấu hình
+## Cấu hình
 
 ### Biến môi trường
 
@@ -355,7 +355,7 @@ Mọi module đọc hằng số từ đây, không hard-code.
 
 ---
 
-## 🛠 Danh mục lệnh CLI
+## Danh mục lệnh CLI
 
 Cú pháp: `vietnews [--load-dir D] [--index-dir D] [--questions-dir D] <lệnh> [tuỳ chọn]` (tương đương `python -m text_summarization`).
 
@@ -392,7 +392,7 @@ Ghi chú:
 
 ---
 
-## 📐 Quy trình đánh giá & benchmark
+## Quy trình đánh giá & benchmark
 
 ### Sinh bộ câu hỏi (`questions`)
 
@@ -438,21 +438,21 @@ Kiểm định thống kê trong `report`: khoảng tin cậy **bootstrap** 95 %
 
 ---
 
-## 📊 Kết quả thực nghiệm
+## Kết quả thực nghiệm
 
 Bộ benchmark chính: **100 câu hỏi** (10 bộ × 10 câu sinh từ kho VietNews), `OUTPUT_QUESTIONS/compare100`. Bộ kiểm chứng: **110 câu held-out** (seed 2026, không trùng bài), `OUTPUT_QUESTIONS/heldout100`, không dùng để tinh chỉnh.
 
-### 🏆 Top-3 LLM
+### Top-3 LLM
 
 Cùng ngữ cảnh truy xuất (hit@1 = 0.85, hit@3 = 0.95; ans@1 = 0.91, ans@3 = 0.98), 4-bit NF4, giải mã greedy, RTX 5060 Laptop 8 GB. Số liệu lấy từ `OUTPUT_QUESTIONS/compare100/compare_report.md`.
 
 | Thứ hạng | LLM | Contains ↑ | 95% CI | Recall ↑ | F1 ↑ | EM ↑ | Giây/câu | VRAM đỉnh | Nhận xét |
 |:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|
-| 🥇 | **`vi-qwen2-3b-rag`** *(mặc định)* | **0.68** | 0.59–0.77 | **0.80** | 0.16 | 0.00 | 4.57 | 3.04 GB | Chính xác nhất, fine-tune cho RAG tiếng Việt (AITeamVN). Trả lời bằng câu hoàn chỉnh nên F1/EM thấp |
-| 🥈 | `qwen2.5-3b` | 0.60 | 0.50–0.70 | 0.74 | 0.32 | 0.04 | 4.48 | 3.99 GB | Câu trả lời gọn (≈ 18 từ); chênh lệch contains với Top 1 **không** có ý nghĩa thống kê (p Holm = 0.45) |
-| 🥉 | `qwen3.5-2b-vie` | 0.49 | 0.39–0.59 | 0.66 | **0.49** | **0.27** | **1.89** | **1.55 GB** | Nhẹ và nhanh nhất, F1/EM cao nhất; phù hợp GPU nhỏ |
+| 1 | **`vi-qwen2-3b-rag`** *(mặc định)* | **0.68** | 0.59–0.77 | **0.80** | 0.16 | 0.00 | 4.57 | 3.04 GB | Chính xác nhất, fine-tune cho RAG tiếng Việt (AITeamVN). Trả lời bằng câu hoàn chỉnh nên F1/EM thấp |
+| 2 | `qwen2.5-3b` | 0.60 | 0.50–0.70 | 0.74 | 0.32 | 0.04 | 4.48 | 3.99 GB | Câu trả lời gọn (≈ 18 từ); chênh lệch contains với Top 1 **không** có ý nghĩa thống kê (p Holm = 0.45) |
+| 3 | `qwen3.5-2b-vie` | 0.49 | 0.39–0.59 | 0.66 | **0.49** | **0.27** | **1.89** | **1.55 GB** | Nhẹ và nhanh nhất, F1/EM cao nhất; phù hợp GPU nhỏ |
 
-> 📌 Hàng `vi-qwen2-3b-rag` ở đây chạy với prompt `vi-rag`; prompt mặc định hiện tại `vi-rag-concise` cho contains tương đương (0.68), xem [mục 3](#3-prompt-ngắn-cho-vi-qwen2-3b-rag). Các mô hình khác: `vistral-7b-chat` (GGUF qua llama-server, contains 0.42, từ chối 20 % câu), `vinallama-2.7b-chat` (contains 0.32, sinh dài dòng ≈ 157 từ), `vietnamese-llama2-7b` (mô hình nền, contains 0.07 ở lần chạy cũ, không phù hợp hỏi đáp).
+> Hàng `vi-qwen2-3b-rag` ở đây chạy với prompt `vi-rag`; prompt mặc định hiện tại `vi-rag-concise` cho contains tương đương (0.68), xem [mục 3](#3-prompt-ngắn-cho-vi-qwen2-3b-rag). Các mô hình khác: `vistral-7b-chat` (GGUF qua llama-server, contains 0.42, từ chối 20 % câu), `vinallama-2.7b-chat` (contains 0.32, sinh dài dòng ≈ 157 từ), `vietnamese-llama2-7b` (mô hình nền, contains 0.07 ở lần chạy cũ, không phù hợp hỏi đáp).
 
 ### 1. Đánh giá truy xuất
 
@@ -477,7 +477,7 @@ Phần lớn các câu "trượt" hit@1 không phải lỗi truy xuất: VietNew
 
 100 câu hỏi, **cùng một ngữ cảnh truy xuất**:
 
-| Tiêu chí | 🥇 vi-qwen2-3b-rag | 🥈 qwen2.5-3b | 🥉 qwen3.5-2b-vie |
+| Tiêu chí | vi-qwen2-3b-rag | qwen2.5-3b | qwen3.5-2b-vie |
 |---|:---:|:---:|:---:|
 | **Contains (chính xác)** | **0.68** | 0.60 | 0.49 |
 | **Recall** | **0.80** | 0.74 | 0.66 |
@@ -539,13 +539,13 @@ Kết quả:
 | `qwen2.5-3b` | 0.950 | 0.655 | 0.785 |
 | `qwen3.5-2b-vie` | 0.945 | 0.630 | 0.685 |
 
-> 📌 Parse lỗi: 0 % ở mọi lần chạy. Hai judge cho **cùng thứ hạng**, kể cả khi `qwen2.5-3b` tự chấm chính nó (thiên vị tự chấm không giải thích được kết quả). Judge `qwen2.5-3b` khắt khe hơn (chỉ cho 0.63 với câu positive) nên giá trị tuyệt đối thấp hơn; dùng `vi-qwen2-3b-rag` làm số chính. **Relevancy có độ tin cậy thấp** (độ chính xác kiểm soát 0.58–0.68), chỉ nên xem như tham khảo.
+> Parse lỗi: 0 % ở mọi lần chạy. Hai judge cho **cùng thứ hạng**, kể cả khi `qwen2.5-3b` tự chấm chính nó (thiên vị tự chấm không giải thích được kết quả). Judge `qwen2.5-3b` khắt khe hơn (chỉ cho 0.63 với câu positive) nên giá trị tuyệt đối thấp hơn; dùng `vi-qwen2-3b-rag` làm số chính. **Relevancy có độ tin cậy thấp** (độ chính xác kiểm soát 0.58–0.68), chỉ nên xem như tham khảo.
 >
 > Vì sao prompt judge không có điểm mẫu: phiên bản đầu đưa khuôn `{"score": 0.0, "reason": "..."}` vào prompt, judge 3B chép nguyên điểm 0.0 nên faithfulness = 0 cho mọi mô hình; đồng thời kết quả parse lỗi bị tính 0 và rubric phạt câu *thiếu* thông tin như câu *bịa*. Cả ba lỗi đã được sửa trong `evaluation/judge.py`, và câu kiểm soát ở trên dùng để phát hiện lỗi đo kiểu này.
 
 ---
 
-## 📂 Cấu trúc thư mục & file sinh ra
+## Cấu trúc thư mục & file sinh ra
 
 ```
 text_summarization/
@@ -599,7 +599,7 @@ File trong một thư mục câu hỏi (vd. `OUTPUT_QUESTIONS/compare100/`):
 
 ---
 
-## 🧪 Kiểm thử
+## Kiểm thử
 
 ```bash
 uv run --group dev pytest           # 69 test, không cần GPU hay tải mô hình
@@ -612,7 +612,7 @@ Lint: `uvx ruff check .` (cấu hình trong `pyproject.toml`, độ dài dòng 1
 
 ---
 
-## 🩺 Xử lý sự cố
+## Xử lý sự cố
 
 | Triệu chứng | Nguyên nhân & cách xử lý |
 |---|---|
