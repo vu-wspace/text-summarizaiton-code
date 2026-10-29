@@ -436,19 +436,19 @@ Bộ benchmark chính: **100 câu hỏi** (10 bộ × 10 câu sinh từ kho Viet
 
 ### 🏆 Top-3 LLM
 
-Cùng ngữ cảnh truy xuất (hit@1 = 0,86, hit@3 = 0,96):
+Cùng ngữ cảnh truy xuất (hit@1 = 0.85, hit@3 = 0.95; ans@1 = 0.91, ans@3 = 0.98), 4-bit NF4, giải mã greedy, RTX 5060 Laptop 8 GB. Số liệu lấy từ `OUTPUT_QUESTIONS/compare100/compare_report.md`.
 
-| Thứ hạng | Model LLM | Contains ↑ | Recall ↑ | F1 ↑ | EM ↑ | Tốc độ | VRAM (4-bit) | Đánh giá & Khuyến nghị |
-|:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|---|
-| 🥇 **Top 1** | **`vi-qwen2-3b-rag`** *(Mặc định)* | **0.67** | **0.81** | 0.16 | 0.00 | 6.10s | ~5.55 GB | **Độ chính xác cao nhất**, fine-tune cho RAG tiếng Việt bởi AITeamVN. Trả lời bằng câu hoàn chỉnh nên F1/EM thấp. |
-| 🥈 **Top 2** | **`qwen2.5-3b`** | **0.59** | **0.74** | **0.35** | **0.06** | 3.06s | ~4.01 GB | **Cân bằng & súc tích**, nhanh gấp đôi Top 1, câu trả lời gọn, phù hợp khi cần phản hồi nhanh. |
-| 🥉 **Top 3** | **`qwen3.5-2b-vie`** | 0.52 | 0.70 | **0.51** | **0.29** | **1.82s** | **~1.54 GB** | **Nhẹ & nhanh nhất**, F1 cao nhất, chỉ ~1,5 GB VRAM. Phù hợp GPU khiêm tốn. |
+| Thứ hạng | LLM | Contains ↑ | 95% CI | Recall ↑ | F1 ↑ | EM ↑ | Giây/câu | VRAM đỉnh | Nhận xét |
+|:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|
+| 🥇 | **`vi-qwen2-3b-rag`** *(mặc định)* | **0.68** | 0.59–0.77 | **0.80** | 0.16 | 0.00 | 4.57 | 3.04 GB | Chính xác nhất, fine-tune cho RAG tiếng Việt (AITeamVN). Trả lời bằng câu hoàn chỉnh nên F1/EM thấp |
+| 🥈 | `qwen2.5-3b` | 0.60 | 0.50–0.70 | 0.74 | 0.32 | 0.04 | 4.48 | 3.99 GB | Câu trả lời gọn (≈ 18 từ); chênh lệch contains với Top 1 **không** có ý nghĩa thống kê (p Holm = 0.45) |
+| 🥉 | `qwen3.5-2b-vie` | 0.49 | 0.39–0.59 | 0.66 | **0.49** | **0.27** | **1.89** | **1.55 GB** | Nhẹ và nhanh nhất, F1/EM cao nhất; phù hợp GPU nhỏ |
 
-> 📌 *Các mô hình khác đã kiểm thử: `vistral-7b-chat` (GGUF, contains 0.43, từ chối 23% câu dù có ngữ cảnh), `vinallama-2.7b-chat` (contains 0.36, sinh dài dòng), `vietnamese-llama2-7b` (mô hình nền, không phù hợp hỏi đáp).*
+> 📌 Hàng `vi-qwen2-3b-rag` ở đây chạy với prompt `vi-rag`; prompt mặc định hiện tại `vi-rag-concise` cho contains tương đương (0.68), xem [mục 3](#3-prompt-ngắn-cho-vi-qwen2-3b-rag). Các mô hình khác: `vistral-7b-chat` (GGUF qua llama-server, contains 0.42, từ chối 20 % câu), `vinallama-2.7b-chat` (contains 0.32, sinh dài dòng ≈ 157 từ), `vietnamese-llama2-7b` (mô hình nền, contains 0.07 ở lần chạy cũ, không phù hợp hỏi đáp).
 
 ### 1. Đánh giá truy xuất
 
-100 câu hỏi, hit@k tính theo bài viết gốc trong top-20 chunk:
+100 câu hỏi, lệnh `retrieval`. hit@k tính theo bài viết gốc trong top-20 chunk; giai đoạn *+ Re-ranker* re-rank cả 20 chunk (pipeline thật chỉ re-rank `TOP_K` = 5), nên số liệu hơi khác hit@k ở bảng so sánh LLM:
 
 | Cơ chế tìm kiếm | Giai đoạn | hit@1 | hit@3 | hit@5 | hit@20 | MRR |
 |---|---|:---:|:---:|:---:|:---:|:---:|
@@ -471,18 +471,20 @@ Phần lớn các câu "trượt" hit@1 không phải lỗi truy xuất: VietNew
 
 | Tiêu chí | 🥇 vi-qwen2-3b-rag | 🥈 qwen2.5-3b | 🥉 qwen3.5-2b-vie |
 |---|:---:|:---:|:---:|
-| **Contains (chính xác)** | **0.67** | 0.59 | 0.52 |
-| **Recall** | **0.81** | 0.74 | 0.70 |
-| **F1** | 0.16 | 0.35 | **0.51** |
-| **EM** | 0.00 | 0.06 | **0.29** |
-| **Tỉ lệ từ chối** | **0.00** | **0.00** | **0.00** |
-| **Thời gian TB** | 6.10s / câu | 3.06s / câu | **1.82s / câu** |
-| **Số từ TB** | 55.4 từ | 17.9 từ | 15.7 từ |
-| **VRAM (4-bit)** | ~5.55 GB | ~4.01 GB | **~1.54 GB** |
+| **Contains (chính xác)** | **0.68** | 0.60 | 0.49 |
+| **Recall** | **0.80** | 0.74 | 0.66 |
+| **F1** | 0.16 | 0.32 | **0.49** |
+| **EM** | 0.00 | 0.04 | **0.27** |
+| **Tỉ lệ từ chối** | 0.01 | 0.01 | **0.00** |
+| **Thời gian TB** | 4.57 s / câu | 4.48 s / câu | **1.89 s / câu** |
+| **Số từ TB** | 59.2 từ | 17.7 từ | **16.2 từ** |
+| **VRAM đỉnh (4-bit)** | 3.04 GB | 3.99 GB | **1.55 GB** |
 
-- **`vi-qwen2-3b-rag`** bóc tách đầy đủ dữ kiện ngữ cảnh thành câu trả lời tự nhiên.
-- **`qwen2.5-3b`** trả lời ngắn gọn, thẳng vào trọng tâm, tiết kiệm 50% thời gian suy luận.
-- **`qwen3.5-2b-vie`** tiết kiệm tài nguyên nhất (1.5 GB VRAM), nhanh nhất, phù hợp triển khai edge hoặc server cấu hình thấp.
+- **`vi-qwen2-3b-rag`** đưa đầy đủ dữ kiện từ ngữ cảnh vào câu trả lời tự nhiên, nhưng dài (≈ 59 từ).
+- **`qwen2.5-3b`** trả lời ngắn gọn, thẳng vào trọng tâm; tốc độ tương đương Top 1.
+- **`qwen3.5-2b-vie`** tốn ít tài nguyên và nhanh nhất (≈ 2,4 lần Top 1), phù hợp máy cấu hình thấp.
+
+Kiểm định McNemar (hiệu chỉnh Holm): `vi-qwen2-3b-rag` hơn `qwen3.5-2b-vie`, `vistral-7b-chat`, `vinallama-2.7b-chat` có ý nghĩa; `vi-qwen2-3b-rag` vs `qwen2.5-3b` và `qwen2.5-3b` vs `qwen3.5-2b-vie` thì không.
 
 **Tập sạch (bỏ câu hỏi mơ hồ):** 25/100 câu do LLM sinh được gắn nhãn trong `OUTPUT_QUESTIONS/compare100/ambiguous.jsonl` (kèm lý do từng câu), **chỉ dựa trên câu hỏi + đáp án chuẩn, không nhìn kết quả của hệ thống**: 5 câu đáp án tương đối (*"Bốn tháng sau đó"*, *"hôm nay"*), 11 câu thiếu định danh (*"Thượng viện Mỹ thông qua đạo luật gì?"*), 9 câu hỏng (đáp án không trả lời câu hỏi). Chấm lại: `vietnews --questions-dir OUTPUT_QUESTIONS/compare100 report --exclude ambiguous.jsonl` → `compare_report_clean.md`.
 
@@ -498,7 +500,7 @@ Truy xuất trên tập sạch: hit@1 0.87, **ans@1 0.95, ans@3 1.00** (ngữ c�
 
 ### 3. Prompt ngắn cho `vi-qwen2-3b-rag`
 
-Mặc định mới `prompt='vi-rag-concise'`: giữ nguyên khuôn prompt AITeamVN, chỉ thêm yêu cầu *"Trả lời bằng MỘT câu ngắn…"*. Cùng ngữ cảnh, chạy lại cả hai prompt trong cùng điều kiện:
+Prompt mặc định `vi-rag-concise` giữ nguyên khuôn prompt AITeamVN, chỉ thêm yêu cầu *"Trả lời bằng MỘT câu ngắn…"*. Cùng ngữ cảnh, chạy lại cả hai prompt trong cùng điều kiện:
 
 | Tập | Prompt | Contains | Recall | F1 | Số từ TB | Giây/câu |
 |---|---|:---:|:---:|:---:|:---:|:---:|
@@ -524,14 +526,14 @@ Kết quả:
 
 | Model | Faithfulness (judge vi-qwen2) | Faithfulness (judge qwen2.5) | Relevancy (judge vi-qwen2) |
 |---|:---:|:---:|:---:|
-| `vi-qwen2-3b-rag` (prompt gốc) | **0.980** | **0.805** | **0.865** |
-| `vi-qwen2-3b-rag` (prompt ngắn, mặc định mới) | 0.975 | 0.755 | 0.860 |
+| `vi-qwen2-3b-rag` (prompt `vi-rag`) | **0.980** | **0.805** | **0.865** |
+| `vi-qwen2-3b-rag` (prompt `vi-rag-concise`, mặc định) | 0.975 | 0.755 | 0.860 |
 | `qwen2.5-3b` | 0.950 | 0.655 | 0.785 |
 | `qwen3.5-2b-vie` | 0.945 | 0.630 | 0.685 |
 
 > 📌 Parse lỗi: 0 % ở mọi lần chạy. Hai judge cho **cùng thứ hạng**, kể cả khi `qwen2.5-3b` tự chấm chính nó (thiên vị tự chấm không giải thích được kết quả). Judge `qwen2.5-3b` khắt khe hơn (chỉ cho 0.63 với câu positive) nên giá trị tuyệt đối thấp hơn; dùng `vi-qwen2-3b-rag` làm số chính. **Relevancy có độ tin cậy thấp** (độ chính xác kiểm soát 0.58–0.68), chỉ nên xem như tham khảo.
 >
-> ⚠ *Kết quả cũ (faithfulness = 0.000 cho mọi model) là lỗi đo, không phải do model*: khuôn mẫu `{"score": 0.0, "reason": "..."}` trong prompt khiến judge 3B chép nguyên điểm 0.0 (57–84 % lý do bắt đầu bằng chuỗi `...`), parse lỗi (8–20 %) bị tính 0 điểm, và rubric phạt câu trả lời *thiếu* thông tin như câu *bịa*. Đã sửa trong `src/text_summarization/evaluation/judge.py`.
+> Vì sao prompt judge không có điểm mẫu: phiên bản đầu đưa khuôn `{"score": 0.0, "reason": "..."}` vào prompt, judge 3B chép nguyên điểm 0.0 nên faithfulness = 0 cho mọi mô hình; đồng thời kết quả parse lỗi bị tính 0 và rubric phạt câu *thiếu* thông tin như câu *bịa*. Cả ba lỗi đã được sửa trong `evaluation/judge.py`, và câu kiểm soát ở trên dùng để phát hiện lỗi đo kiểu này.
 
 ---
 
@@ -564,7 +566,7 @@ text_summarization/
 ├── OUTPUT_LOAD/               # (gitignore) data_article.json
 ├── OUTPUT_INDEX/              # (gitignore) entities.json, vectors/{chunks.pkl, embedds.npy}, qdrant/
 ├── OUTPUT_QUESTIONS/          # (gitignore) kết quả đánh giá
-│   ├── compare100/            # benchmark chính: 100 câu, câu trả lời 6 LLM, judge_<llm>/report.md
+│   ├── compare100/            # benchmark chính: 100 câu, câu trả lời 5 LLM (+ biến thể prompt), judge_<llm>/
 │   ├── heldout100/            # 110 câu held-out (seed 2026) để kiểm chứng
 │   └── archive/               # các lần chạy cũ
 ├── Dockerfile                 # Image pipeline RAG, PyTorch CUDA 12.8, transformers 4.x
@@ -598,7 +600,7 @@ uv run --group dev pytest -k router # chạy một nhóm
 
 Pipeline chỉ gọi mô hình qua lớp `Models`, nên test thay bằng mô hình giả (`tests/conftest.py`). Các test bao phủ router, chuẩn hoá văn bản, semantic chunking, NER (gộp bí danh), Qdrant store, sinh và lọc câu hỏi, chỉ số chấm, so sánh LLM và parse kết quả judge.
 
-Lint: cấu hình `ruff` trong `pyproject.toml` (độ dài dòng 120).
+Lint: `uvx ruff check .` (cấu hình trong `pyproject.toml`, độ dài dòng 120).
 
 ---
 
